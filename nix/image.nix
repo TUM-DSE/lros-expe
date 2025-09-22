@@ -70,11 +70,6 @@ in
   };
   boot.initrd.availableKernelModules = [ "overlay" ];
   boot.kernelParams = [ "console=ttyAMA0,115200" ];
-  boot.loader.grub.extraConfig = "
-   serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1
-   terminal_input serial
-   terminal_output serial
-  ";
 
   nix.extraOptions = ''
       experimental-features = nix-command flakes
@@ -97,7 +92,7 @@ in
   system.stateVersion = "24.05";
 
   # things to improve QoL with the guest shell
-  #console.enable = true;
+  console.enable = true;
   environment.loginShellInit = "${resize}/bin/resize";
   systemd.services."serial-getty@ttyAMA0".enable = true;
   systemd.services."serial-getty@ttyAMA0".environment.TERM = "xterm-256color";

@@ -16,7 +16,7 @@
         , flake-utils
 	, srvos
     } @ inputs:
-    (flake-utils.lib.eachDefaultSystem (system:
+    (flake-utils.lib.eachSystem ["aarch64-linux"] (system:
     let
         pkgs = nixpkgs.legacyPackages.${system};
         make-disk-image = import (./nix/make-disk-image.nix);
@@ -29,6 +29,7 @@
                 config = self.nixosConfigurations.linux-image.config;
                 inherit (pkgs) lib;
                 inherit pkgs;
+                partitionTableType = "efi";
                 format = "qcow2";
             };
         };
@@ -43,12 +44,13 @@
                     qemu_full
                     just
                 ];
+                LINUX="${pkgs.linuxPackages_latest.kernel}";
             };
         };
     })) // (let
         system = "aarch64-linux";
         pkgs = nixpkgs.legacyPackages.${system};
-        kernelPackages = pkgs.linuxKernel.packages.linux_6_6;
+        kernelPackages = pkgs.linuxPackages_latest; #pkgs.linuxKernel.packages.linux_6_6;
     in{
         nixosConfigurations = {
             linux-image = inputs.nixpkgs.lib.nixosSystem {
@@ -61,7 +63,6 @@
                         inherit kernelPackages;
                     })
                     ./nix/nixos-generators-qcow.nix
-		    #srvos.nixosModules.common
                 ];
             };
         };

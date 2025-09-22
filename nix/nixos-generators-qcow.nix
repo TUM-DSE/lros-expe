@@ -13,16 +13,16 @@
   };
 
   boot.growPartition = true;
-  boot.kernelParams = [ "console=ttyS0" ];
-  boot.loader.grub.device = "nodev";
-  #if (pkgs.stdenv.system == "x86_64-linux") then
-  #  (lib.mkDefault "/dev/vda")
-  #else
-  #  (lib.mkDefault "nodev");
+  #boot.kernelParams = [ "console=ttyAMA0" ];
+  boot.loader.grub.device = if (pkgs.stdenv.system == "x86_64-linux") then
+    (lib.mkDefault "/dev/vda")
+  else
+    (lib.mkDefault "nodev");
 
   boot.loader.grub.enable = true;
-  boot.loader.grub.efiSupport = false; #lib.mkIf (pkgs.stdenv.system != "x86_64-linux") (lib.mkDefault true);
-  boot.loader.grub.efiInstallAsRemovable = false; #lib.mkIf (pkgs.stdenv.system != "x86_64-linux") (lib.mkDefault true);
+  boot.loader.efi.canTouchEfiVariables = false;
+  boot.loader.grub.efiSupport = lib.mkIf (pkgs.stdenv.system != "x86_64-linux") (lib.mkDefault true);
+  boot.loader.grub.efiInstallAsRemovable = lib.mkIf (pkgs.stdenv.system != "x86_64-linux") (lib.mkDefault true);
   boot.loader.timeout = 0;
 
 
