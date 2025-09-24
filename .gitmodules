@@ -1,3 +1,12 @@
 [submodule "llama.cpp"]
 	path = llama.cpp
 	url = git@github.com:TUM-DSE/llama.cpp.git
+[submodule "lros"]
+	path = lros
+	url = git@github.com:TUM-DSE/lros.git
+[submodule "lros-qemu"]
+	path = lros-qemu
+	url = git@github.com:TUM-DSE/lros-qemu.git
+[submodule "vaccel"]
+	path = vaccel
+	url = git@github.com:TUM-DSE/vaccel.git
