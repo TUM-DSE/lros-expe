@@ -1,1 +1,5 @@
 VMs/
+.bash_history
+.cache
+.nix-channels
+.lesshst

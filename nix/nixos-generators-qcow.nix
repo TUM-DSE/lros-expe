@@ -23,6 +23,7 @@
   boot.loader.efi.canTouchEfiVariables = false;
   boot.loader.grub.efiSupport = lib.mkIf (pkgs.stdenv.system != "x86_64-linux") (lib.mkDefault true);
   boot.loader.grub.efiInstallAsRemovable = lib.mkIf (pkgs.stdenv.system != "x86_64-linux") (lib.mkDefault true);
+  boot.loader.initScript.enable = lib.mkForce false;
   boot.loader.timeout = 0;
 
 

@@ -26,7 +26,7 @@
         packages = 
         {
             linux-image = make-disk-image {
-                config = self.nixosConfigurations.linux-image.config;
+                config = self.nixosConfigurations.linux-conf.config;
                 inherit (pkgs) lib;
                 inherit pkgs;
                 partitionTableType = "efi";
@@ -45,6 +45,9 @@
                     just
                 ];
                 LINUX="${pkgs.linuxPackages_latest.kernel}";
+		shellHook = ''
+		    export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)
+        	'';
             };
         };
     })) // (let
@@ -53,7 +56,7 @@
         kernelPackages = pkgs.linuxPackages_latest; #pkgs.linuxKernel.packages.linux_6_6;
     in{
         nixosConfigurations = {
-            linux-image = inputs.nixpkgs.lib.nixosSystem {
+            linux-conf = inputs.nixpkgs.lib.nixosSystem {
                 inherit system;
                 modules = [ 
                     (import ./nix/image.nix

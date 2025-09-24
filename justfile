@@ -18,11 +18,15 @@ ssh COMMAND="":
     root@localhost -- "{{COMMAND}}"
 
 vm nb_cpu="1" size_mem="2G":
-    qemu-system-aarch64 -enable-kvm \
+    #!/usr/bin/env bash
+    let "taskset_cores = {{nb_cpu}}-1"
+    taskset -c 0-$taskset_cores qemu-kvm \
         -cpu host \
         -smp {{nb_cpu}} \
         -m {{size_mem}} \
         -machine virt \
+        -kernel $LINUX/Image \
+        -append "root=/dev/vda2 init="$CONF"/init console=ttyAMA0,115200" \
         -device virtio-serial \
         -fsdev local,id=home,path={{proot}},security_model=none \
         -device virtio-9p-pci,fsdev=home,mount_tag=home,disable-modern=on,disable-legacy=off \
@@ -46,5 +50,6 @@ vm-image-init:
         qemu-img resize {{proot}}/VMs/$1.qcow2 +8g
     }
 
-    nix build .#linux-image --out-link {{proot}}/VMs/ro
+    taskset -c 0-3 nix build .#linux-image --out-link {{proot}}/VMs/ro
     overwrite linux-image
+    export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)

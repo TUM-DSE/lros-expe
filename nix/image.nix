@@ -83,6 +83,10 @@ in
     pkgs.python3
     resize
     kernelPackages.perf
+    pkgs.cmake
+    pkgs.gcc
+    pkgs.llama-cpp
+    pkgs.flamegraph
     # Add more packages here if needed
   ];
 
