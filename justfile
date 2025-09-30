@@ -1,6 +1,10 @@
 proot := justfile_directory()
 qemu_ssh_port := "2222"
 
+models_dir := proot+"/models"
+models_to_get := (["Llama-3.2-1B-Instruct-f16.gguf"] = "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-f16.gguf"
+				)
+
 default:
     @just --choose
 
@@ -53,3 +57,17 @@ vm-image-init:
     taskset -c 0-3 nix build .#linux-image --out-link {{proot}}/VMs/ro
     overwrite linux-image
     export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)
+
+get_models:
+	#!/usr/bin/env bash
+	mkdir -p {{models_dir}}
+	declare -A models={{models_to_get}}
+	for url in $models; do
+		name=$(echo $url | awk -F '/' '{print $(NF)})'
+		echo $name
+		#if [ -f "$models_dir/$name" ]; then
+		#    echo "$name already exists, skipping."
+		#else
+		#    wget -q --show-progress -O "{{models_dir}}/$name" "$url"
+		#fi
+	done

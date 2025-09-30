@@ -1,0 +1,4 @@
+import? "../../justfile"
+
+micro_pow:
+	python micro_pow.py

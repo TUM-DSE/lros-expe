@@ -9,6 +9,8 @@ On the Orange Pi Ultra that we have, cores [0-3] are Cortex-A55 (in-order -> mor
 
 Clone with `git clone [url] --recursive` or execute `git submodule update --init --recursive` to initialize the submodules 
 
+To get the models, run the `scripts/download_models.sh` script.
+
 ## Build
 
 1. vaccel
@@ -32,4 +34,11 @@ mkdir build
 cd build
 CFLAGS=-Wno-error PKG_CONFIG_PATH=/home/$(whoami)/lros-expe/vaccel/build/out/usr/local/lib/aarch64-linux-gnu/pkgconfig ../configure --target-list=aarch64-softmmu --enable-virtfs
 make -j
+```
+
+3. llama.cpp
+
+```
+cmake -B build
+cmake --build build --config Release -j
 ```
