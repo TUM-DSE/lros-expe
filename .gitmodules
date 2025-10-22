@@ -10,3 +10,4 @@
 [submodule "vaccel"]
 	path = vaccel
 	url = git@github.com:TUM-DSE/vaccel.git
+    branch = "matmul"

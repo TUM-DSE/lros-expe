@@ -3,10 +3,8 @@
     
     inputs =
     {
-        nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+        nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
         flake-utils.url = "github:numtide/flake-utils";
-	srvos.url = "github:nix-community/srvos";
-	srvos.inputs.nixpkgs.follows = "nixpkgs";
     };
     
     outputs = 
@@ -14,7 +12,6 @@
         self
         , nixpkgs
         , flake-utils
-	, srvos
     } @ inputs:
     (flake-utils.lib.eachSystem ["aarch64-linux"] (system:
     let
@@ -32,6 +29,13 @@
                 partitionTableType = "efi";
                 format = "qcow2";
             };
+
+            vaccel = pkgs.callPackage ./nix/vaccel.nix {
+                inherit pkgs;
+                inherit inputs;
+                inherit selfpkgs;
+                inherit self;
+            };
         };
         
 	devShells = {
@@ -39,10 +43,16 @@
                 name = "lros-devshell";
                 buildInputs = with pkgs;
                 [
+                    ack
                     python3
                     gdb
                     qemu_full
                     just
+                    meson
+                    ninja
+                    glib.dev
+                    pkg-config
+                    python312Packages.tomli
                 ];
                 LINUX="${pkgs.linuxPackages_latest.kernel}";
 		shellHook = ''

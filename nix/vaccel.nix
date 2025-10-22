@@ -8,25 +8,34 @@
 pkgs.stdenv.mkDerivation {
   pname = "vaccel";
   version = "v" + "0.7.1";
-  src = fetchFromGitHub {
+  src = pkgs.fetchFromGitHub {
     owner = "TUM-DSE";
     repo = "vaccel";
     rev = "cc9942e6f5de46ff1f5eb139a208de5998024d64";
-    hash = "";
+    hash = "sha256-3CZfSGQtCcFlZZiVHiZSoFbHbKOg/GtVVKlSWWeCq0k=";
+    fetchSubmodules = true;
   };
 
-  cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
-  postPatch = ''
-    substituteInPlace CMakeLists.txt \
-      --replace 'set(CMAKE_INSTALL_PREFIX ''${CMAKE_BINARY_DIR}/install)' ""
+  nativeBuildInputs = [ pkgs.meson pkgs.ninja pkgs.git pkgs.pkg-config ];
+  
+  patchPhase = ''
+    cd scripts/common
+    git apply ../../submodules.patch
   '';
-  nativeBuildInputs = [ pkgs.cmake pkgs.gnumake ];
-  patches = [ ./cstdint.patch ];
+
+  mesonFlags = [
+    "--buildtype=release"
+  ];
+  mesonBuildDir = "nix-build";
+
+  installPhase = ''
+    mkdir -p $out
+    cp tst $out
+  '';
 
   meta = with lib; {
-    homepage = https://github.com/LLNL/umap;
-    description = "User-space Page Management";
+    homepage = "https://vaccel.org/";
+    description = "vAccel is a runtime library that aims to help development of applications using hardware acceleration";
     license = licenses.lgpl2;
-    broken = false;
   };
 }
