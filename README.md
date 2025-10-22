@@ -22,7 +22,7 @@ cd scripts/common; git apply ../../submodules.patch; cd ../..
 meson setup --buildtype=release build
 meson compile -C build
 meson install -C build --destdir=out
-sed -i "s/prefix=/prefix=\/home\/$(whoami)\/lros-expe\/vaccel\/build\/out/" /home/$(whoami)/lros-expe/vaccel/build/out/usr/local/lib/aarch64-linux-gnu/pkgconfig/vaccel.pc
+sed -i "s/prefix=/prefix=\/home\/$(whoami)\/lros-expe\/vaccel\/build\/out/" /home/$(whoami)/lros-expe/vaccel/build/out/usr/local/lib/pkgconfig/vaccel.pc
 ```
 
 2. lros-qemu
