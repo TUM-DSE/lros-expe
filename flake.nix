@@ -53,6 +53,7 @@
                     glib.dev
                     pkg-config
                     python312Packages.tomli
+		    bc
                 ];
                 LINUX="${pkgs.linuxPackages_latest.kernel}";
 		shellHook = ''

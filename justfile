@@ -10,7 +10,7 @@ default:
 help:
     just --list
 
-ssh COMMAND="":
+ssh_local cmd="":
     ssh \
     -i {{proot}}/nix/keyfile \
     -o StrictHostKeyChecking=no \
@@ -18,7 +18,16 @@ ssh COMMAND="":
     -o IdentityAgent=/dev/null \
     -F /dev/null \
     -p {{qemu_ssh_port}} \
-    root@localhost -- "{{COMMAND}}"
+    root@localhost -- "{{cmd}}"
+
+ssh_remote host="" cmd="":
+    ssh \
+    -i {{proot}}/nix/keyfile \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o IdentityAgent=/dev/null \
+    -F /dev/null \
+    {{host}} -- "{{cmd}}"
 
 vm nb_cpu="1" size_mem="2G":
     #!/usr/bin/env bash
@@ -99,3 +108,4 @@ build_qemu:
     else
         echo "Qemu is already built"
     fi
+
