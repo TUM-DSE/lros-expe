@@ -1,12 +1,13 @@
 import? "../justfile"
-default_outdir=proot+"/benchmarks/results/"
+
+
 # OrangePi Notes
 # powerlogger.py for the power measurements and sensors for the temperature
-#
+# Stop it with `sudo kill -15 [pid of powerlogger.py]` (SIGTERM)
 
-measure_orangepi outdir="{{default_outdir}}":
+measure_orangepi:
 	#!/usr/bin/env bash
-	sudo PYTHONPATH=$PYTHONPATH ./powerlogger.py &
+	sudo PYTHONPATH=$PYTHONPATH ./powerlogger.py
 
 
 # Jetson Notes
@@ -28,8 +29,10 @@ measure_jetson period="1":
 	base_0x40="/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon7/"
 	base_0x41="/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon7/"
 	base_temp="/sys/devices/virtual/thermal/"
+	beginning=$(date "+%s.%N")
 	
 	make_measurement(){
+		t=$(bc <<< "$(date "+%s.%N") - $beginning")
 		sys_v=$(bc <<< "scale=3; $(cat $base_0x40/in3_input)/1000")
 		sys_i=$(bc <<< "scale=3; $(cat $base_0x40/curr3_input)/1000")
 		sys_p=$(bc <<< "scale=3; $sys_v*$sys_i")
@@ -52,10 +55,10 @@ measure_jetson period="1":
 		mem_v=$(bc <<< "scale=3; $(cat $base_0x41/in2_input)/1000")
 		mem_i=$(bc <<< "scale=3; $(cat $base_0x41/curr2_input)/1000")
 		mem_p=$(bc <<< "scale=3; $mem_v*$mem_i")
-		echo $sys_v,$sys_i,$sys_p,$sys_temp0,$sys_temp1,$sys_temp2,$cpu_v,$cpu_i,$cpu_p,$cpu_temp,$gpu_v,$gpu_i,$gpu_p,$gpu_temp,$mem_v,$mem_i,$mem_p
+		echo ${t::-6},$sys_v,$sys_i,$sys_p,$sys_temp0,$sys_temp1,$sys_temp2,$cpu_v,$cpu_i,$cpu_p,$cpu_temp,$gpu_v,$gpu_i,$gpu_p,$gpu_temp,$mem_v,$mem_i,$mem_p
 	}
 
-	echo "system_voltage,system_intensity,system_power,system_temp0,system_temp1,system_temp2,cpu_voltage,cpu_intensity,cpu_power,cpu_temp,gpu_voltage,gpu_intensity,gpu_power,gpu_temp,memory_voltage,memory_intensity,memory_power"
+	echo "timestamp,system_voltage,system_intensity,system_power,system_temp0,system_temp1,system_temp2,cpu_voltage,cpu_intensity,cpu_power,cpu_temp,gpu_voltage,gpu_intensity,gpu_power,gpu_temp,memory_voltage,memory_intensity,memory_power"
 	while true
 	do
 		make_measurement

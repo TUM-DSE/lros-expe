@@ -31,6 +31,7 @@ import usb.core
 import usb.util
 import argparse
 from typing import Union
+import signal
 
 
 # FNB48
@@ -139,11 +140,13 @@ def print_configs_overview(dev):
 # State for accumulating in decodee
 energy = 0.0
 capacity = 0.0
+beginning = 0
 
 
-def decode(data, calculate_crc, time_interval, alpha):
+def decode(data, calculate_crc, time_interval, alpha, therm_f):
     global energy
     global capacity
+    global beginning
     temp_ema = None
 
     # Data is 64 bytes (64 bytes of HID data minus vendor constant 0xaa)
@@ -172,6 +175,8 @@ def decode(data, calculate_crc, time_interval, alpha):
                 file=sys.stderr,
             )
             return
+    if beginning == 0:
+        beginning = time.time()
 
     t0 = time.time() - 4 * time_interval
     for i in range(4):
@@ -205,11 +210,26 @@ def decode(data, calculate_crc, time_interval, alpha):
         # TODO(baryluk): This might be slightly inaccurate, if there is sampling jitter.
         energy += power * time_interval
         capacity += current * time_interval
-        t = t0 + i * time_interval
+        t = (t0 + i * time_interval) - beginning
+        temp = [0.0] * 7
+        for i in range(7):
+            therm_f[i].seek(0)
+            temp[i] = therm_f[i].read().rstrip()
+        soc = temp[0][:-3] + '.' + temp[0][-3:]
+        big0 = temp[1][:-3] + '.' + temp[1][-3:]
+        big1 = temp[2][:-3] + '.' + temp[2][-3:]
+        little = temp[3][:-3] + '.' + temp[3][-3:]
+        center = temp[4][:-3] + '.' + temp[4][-3:]
+        gpu = temp[5][:-3] + '.' + temp[5][-3:]
+        npu = temp[6][:-3] + '.' + temp[6][-3:]
         print(
-            f"{t:.3f},{i},{voltage:7.5f},{current:7.5f},{dp:5.3f},{dn:5.3f},"
-            f"{temp_ema:6.3f},{energy:.6f},{capacity:.6f}"
+            f"{t:.3f},{voltage:2.3f},{current:2.3f},{power:2.3f},"
+            f"{soc},{big0},{big1},{little},{center},{gpu},{npu}"
         )
+        #print(
+        #    f"{t:.3f},{i},{voltage:7.5f},{current:7.5f},{dp:5.3f},{dn:5.3f},"
+        #    f"{temp_ema:6.3f},{energy:.6f},{capacity:.6f}"
+        #)
     # unknown62 = data[62]  # data[-2]
     # print(f"unknown62 {unknown:02x}")
     # print()
@@ -235,6 +255,30 @@ def str2bool(v: str) -> bool:
         return False
     assert False, "Argument must be a boolean (true or false)"
 
+class Drainer:
+    stop_now = False
+    ep_in = None
+
+    def __init__(self, ep):
+        signal.signal(signal.SIGINT, self.drain)
+        signal.signal(signal.SIGTERM, self.drain)
+        self.ep_in = ep
+
+    def drain(self, signum, frame):
+        self.stop_now = True
+        try:
+            while True:
+                # Exhaust data in descriptor
+                # We do not know exactly how many bytes to read (even if we track things like refresh
+                # and continue_time it might be tricky), so just read with timeout.
+                data = self.ep_in.read(size_or_buffer=64, timeout=1000)
+        except usb.core.USBTimeoutError as e:
+            # Exception [Errno 110] Operation timed out
+            # This is expected during draining, and in fact indicates a success.
+            print("", file=sys.stderr)
+        except Exception as e:
+            print(f"Exception {type(e)} {e}", file=sys.stderr)
+            raise
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -322,54 +366,40 @@ def main():
     request_data(is_fnb58_or_fnb48s, ep_out)
 
     print()  # Extra line so concatenation work better in gnuplot.
-    print("timestamp,sample_in_packet,voltage_V,current_A,dp_V,dn_V,temp_C_ema,energy_Ws,capacity_As")
+    print("timestamp,system_voltage,system_intensity,system_power,soc_temp,big0_temp,big1_temp,little_temp,center_temp,gpu_temp,npu_temp")
 
     time.sleep(0.1)
     refresh = 1.0 if is_fnb58_or_fnb48s else 0.003  # 1 s for FNB58 / FNB48S, 3 ms for others
     continue_time = time.time() + refresh
 
     alpha = args.alpha
+    base_path="/sys/class/thermal/thermal_zone"
+    therm_f = [None] * 7
+    therm_f[0] = open(base_path+"0/temp")
+    therm_f[1] = open(base_path+"1/temp")
+    therm_f[2] = open(base_path+"2/temp")
+    therm_f[3] = open(base_path+"3/temp")
+    therm_f[4] = open(base_path+"4/temp")
+    therm_f[5] = open(base_path+"5/temp")
+    therm_f[6] = open(base_path+"6/temp")
 
-    stop = False
-    while not stop:
-        try:
-            data = ep_in.read(size_or_buffer=64, timeout=5000)
+    drainer = Drainer(ep_in)
+    while not drainer.stop_now:
+        #try:
+        data = ep_in.read(size_or_buffer=64, timeout=5000)
 
-            # print("".join([f"{x:02x}" for x in data]))
+        # print("".join([f"{x:02x}" for x in data]))
+        if not drainer.stop_now:
+            decode(data, crc_calculator, time_interval, alpha, therm_f)
 
-            decode(data, crc_calculator, time_interval, alpha)
-
-            if time.time() >= continue_time:
-                continue_time = time.time() + refresh
-                ep_out.write(b"\xaa\x83" + b"\x00" * 61 + b"\x9e")
-        except KeyboardInterrupt:
-            print(
-                "Terminating due to the keyboard interrupt, please wait until draining is complete …", file=sys.stderr
-            )
-            stop = True
-
-        if os.path.exists("fnirsi_stop"):
-            stop = True
-
-    try:
-        while True:
-            # Exhaust data in descriptor
-            if args.verbose:
-                print("Please wait until draining is finished …", file=sys.stderr)
-            # We do not know exactly how many bytes to read (even if we track things like refresh
-            # and continue_time it might be tricky), so just read with timeout.
-            data = ep_in.read(size_or_buffer=64, timeout=1000)
-            if data:
-                if args.verbose:
-                    print(f"During termination drained {len(data)} bytes", file=sys.stderr)
-    except usb.core.USBTimeoutError as e:
-        # Exception [Errno 110] Operation timed out
-        # This is expected during draining, and in fact indicates a success.
-        if args.verbose:
-            print("Exiting …", file=sys.stderr)
-    except Exception as e:
-        print(f"Exception {type(e)} {e}", file=sys.stderr)
-        raise
+        if time.time() >= continue_time:
+            continue_time = time.time() + refresh
+            ep_out.write(b"\xaa\x83" + b"\x00" * 61 + b"\x9e")
+        #except KeyboardInterrupt:
+        #    print(
+        #        "Terminating due to the keyboard interrupt, please wait until draining is complete …", file=sys.stderr
+        #    )
+        #    stop = True
 
 
 if __name__ == "__main__":
