@@ -1,12 +1,13 @@
 import? "../justfile"
-
+default_outdir=proot+"/benchmarks/results/"
 # OrangePi Notes
 # powerlogger.py for the power measurements and sensors for the temperature
 #
 
-measure_orangepi:
+measure_orangepi outdir="{{default_outdir}}":
 	#!/usr/bin/env bash
-	sudo env PATH=$PATH ./powerlogger.py
+	sudo PYTHONPATH=$PYTHONPATH ./powerlogger.py &
+
 
 # Jetson Notes
 # `sensors` for the power and temperature measurements
@@ -22,7 +23,7 @@ measure_orangepi:
 # At 0x40: channel 1 is the GPU and the SoC, channel 2 is the CPU, channel 3 is the whole system (at 5V)
 # At 0x41: channel 1 and 3 are unused, channel 2 is the DRAM
 
-measure_jetson:
+measure_jetson period="1":
 	#!/usr/bin/env bash
 	base_0x40="/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon7/"
 	base_0x41="/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon7/"
@@ -55,8 +56,8 @@ measure_jetson:
 	}
 
 	echo "system_voltage,system_intensity,system_power,system_temp0,system_temp1,system_temp2,cpu_voltage,cpu_intensity,cpu_power,cpu_temp,gpu_voltage,gpu_intensity,gpu_power,gpu_temp,memory_voltage,memory_intensity,memory_power"
-	for i in `seq 1 30`
+	while true
 	do
 		make_measurement
-		sleep 1
+		sleep {{period}}
 	done

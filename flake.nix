@@ -53,6 +53,8 @@
                     glib.dev
                     pkg-config
                     python312Packages.tomli
+		    python312Packages.pyusb
+		    python312Packages.crc
 		    bc
                 ];
                 LINUX="${pkgs.linuxPackages_latest.kernel}";
