@@ -3,6 +3,7 @@ import? "../justfile"
 LROS_IMAGE_NAME := "llama.cpp_qemu-arm64"
 LROS_PATH := proot + "/../lros/"
 
+LLAMA_CPP_TARGETS := "llama-batched-bench"
 
 OUT_DIR := proot + "/../bench/out"
 
@@ -17,15 +18,33 @@ build spec:
 
 	case {{lowercase(spec)}} in
 		lros)
-			cd {{LROS_PATH}} && kraft build -c {{LROS_PATH}}/bench.config.lama.cpp_qemu-arm64 --no-configure
+			cd {{LROS_PATH}}
+			kraft build -c {{LROS_PATH}}/bench.vaccel.config.lama.cpp_qemu-arm64 --no-configure && mv .unikraft/build/llama.cpp_qemu-arm64 bench-vaccel_qemu-arm64
+			kraft build -c {{LROS_PATH}}/bench.vaccel-novec.config.lama.cpp_qemu-arm64 --no-configure && mv .unikraft/build/llama.cpp_qemu-arm64 bench-vaccel-novec_qemu-arm64
+			kraft build -c {{LROS_PATH}}/bench.cpu.config.lama.cpp_qemu-arm64 --no-configure && mv .unikraft/build/llama.cpp_qemu-arm64 bench-cpu_qemu-arm64
+			kraft build -c {{LROS_PATH}}/bench.cpu-novec.config.lama.cpp_qemu-arm64 --no-configure && mv .unikraft/build/llama.cpp_qemu-arm64 bench-cpu-nopvec_qemu-arm64
 		;;
 
 		linux-vm | vm | linux | process)
 			if [ ! -x "$(command -v llama-batched-bench)" ]; then  # Check for external build
-			    [ -x "$(command -v cmake)" ] && cd {{LROS_PATH}}/llama.cpp-rknn
-			    # Only run setup if build files don't exist already
-				[ -f {{LROS_PATH}}/llama.cpp-rknn/build/CMakeCache.txt ] || cmake -B build . -DGGML_CUDA=OFF -DGGML_LLAMAFILE=OFF -DCMAKE_BUILD_TYPE=Release
-				cmake --build build -- -j $(nproc)
+				[ -x "$(command -v cmake)" ] && cd {{LROS_PATH}}/llama.cpp-rknn
+				# Only run setup if build files don't exist already
+
+				# CPU-only
+				[ -f {{LROS_PATH}}/llama.cpp-rknn/build/CMakeCache.txt ] || cmake -B build . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release
+				cmake --build build -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
+
+				# CUDA
+				if [ -x "$(command -v nvcc)" ]; then
+					[ -f {{LROS_PATH}}/llama.cpp-rknn/build-cuda/CMakeCache.txt ] || cmake -B build-cuda . -DGGML_CUDA=ON -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release
+					cmake --build build-cuda -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
+				fi
+
+				# RKNN
+				if [ -d /sys/devices/platform/fdab0000.npu ]; then
+					[ -f {{LROS_PATH}}/llama.cpp-rknn/build-rknn/CMakeCache.txt ] || cmake -B build-rknn . -DGGML_CUDA=OFF -DGGML_RKNN=ON -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release
+					cmake --build build-rknn -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
+				fi
 			fi
 		;;
 	esac
