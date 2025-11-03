@@ -72,6 +72,11 @@ build spec variant:
 						[ -f {{LROS_PATH}}/llama.cpp-rknn/build/CMakeCache.txt ] || cmake -B build . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 						cmake --build build -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
 					;;&
+					cpu-thp )
+						# CPU with huge page
+						[ -f {{LROS_PATH}}/llama.cpp-rknn/build-thp/CMakeCache.txt ] || cmake -B build-thp . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DGGML_THP=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
+						cmake --build build-thp -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
+					;;
 					all | cuda )
 						# CUDA
 						if [ -x "$(command -v nvcc)" ]; then
@@ -208,3 +213,22 @@ bench spec variant="all" size_mem="16G": (build spec variant)
 			esac
 		;;
 	esac
+
+hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
+	#!/usr/bin/env bash
+
+	set -ex
+
+	mkdir -p {{OUT_DIR}}/thp
+
+	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
+		-o {{OUT_DIR}}/thp/perf_base_$(date -Iseconds).json \
+		{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+		2> >(tee {{OUT_DIR}}/thp/bench_base_$(date -Iseconds).err.txt >&2) \
+		| tee {{OUT_DIR}}/thp/bench_base_$(date -Iseconds).out.txt
+
+	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
+		-o {{OUT_DIR}}/thp/perf_thp_$(date -Iseconds).json \
+		{{proot}}/../lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+		2> >(tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).err.txt >&2) \
+		| tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).out.txt
