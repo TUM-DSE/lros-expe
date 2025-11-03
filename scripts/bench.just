@@ -10,8 +10,8 @@ OUT_DIR := proot + "/../bench/out"
 EVAL_ARGS := "-npp 16,32 -ntg 128,256 -npl 1,2 -t 1 -ngl 20 --no-mmap --no-perf"
 
 
-run_lros img out out_err size_mem="16G":
-	qemu-system-aarch64 \
+run_lros img out out_err cpu_type="big" size_mem="16G" :
+	taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} qemu-system-aarch64 \
 		-kernel {{img}} \
 		-append "llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
 		-cpu host \
@@ -163,12 +163,12 @@ bench spec variant="all" size_mem="16G": (build spec variant)
 
 			sleep 40
 
-			just ssh "/root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
+			just ssh_local "/root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
 				> {{OUT_DIR}}/bench_vm_$(date -Iseconds).out.txt 2> {{OUT_DIR}}/bench_vm_$(date -Iseconds).err.txt
 
 			sleep 40
 
-			just ssh "poweroff"
+			just ssh_local "poweroff"
 		;;
 
 		linux | process)
