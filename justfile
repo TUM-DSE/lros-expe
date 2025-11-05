@@ -29,9 +29,10 @@ ssh_remote host="" cmd="":
     -F /dev/null \
     {{host}} -- "{{cmd}}"
 
-vm nb_cpu="1" size_mem="2G":
+vm nb_cpu="1" size_mem="2G" cpu_type="big":
     #!/usr/bin/env bash
-    let "taskset_cores = {{nb_cpu}}-1"
+    let "taskset_cores_start = {{ if cpu_type == "big" { 4 } else { 0 } }}"
+    let "taskset_cores_end = taskset_cores_start+{{nb_cpu}}-1"
     taskset -c 0-$taskset_cores qemu-kvm \
         -cpu host \
         -smp {{nb_cpu}} \

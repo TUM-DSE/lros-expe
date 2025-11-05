@@ -106,7 +106,7 @@ build spec variant:
 		;;
 	esac
 
-bench spec variant="all" size_mem="16G": (build spec variant)
+bench spec variant="all" cpu_type="big" size_mem="16G": (build spec variant)
 	#!/usr/bin/env bash
 
 	set -ex
@@ -135,25 +135,29 @@ bench spec variant="all" size_mem="16G": (build spec variant)
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-vaccel_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).err.txt
+						{{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).err.txt \
+						{{ cpu_type }}
 				;;&
 				all | vaccel-novec )
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-vaccel-novec_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).err.txt
+						{{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).err.txt \
+						{{ cpu_type }}
 				;;&
 				all | cpu )
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_cpul_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).err.txt
+						{{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).err.txt \
+						{{ cpu_type }}
 				;;&
 				all | cpu-novec )
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-cpu-novec_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).err.txt
+						{{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).err.txt \
+						{{ cpu_type }}
 				;;&
 				all | vaccel | vaccel-novec | cpu | cpu-novec)
 				;;
@@ -179,6 +183,7 @@ bench spec variant="all" size_mem="16G": (build spec variant)
 		linux | process)
 			case {{lowercase(variant)}} in
 				all | cpu )
+					taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
 					{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 						2> >(tee {{OUT_DIR}}/bench_process_cpu_$(date -Iseconds).err.txt >&2) \
 						| tee {{OUT_DIR}}/bench_process_cpu_$(date -Iseconds).out.txt
@@ -186,6 +191,7 @@ bench spec variant="all" size_mem="16G": (build spec variant)
 				all | cuda )
 					# CUDA
 					if [ -d /proc/driver/nvidia/ ]; then
+						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
 						{{proot}}/../lros/llama.cpp-rknn/build-cuda/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 							2> >(tee {{OUT_DIR}}/bench_process_cuda_$(date -Iseconds).err.txt >&2) \
 							| tee {{OUT_DIR}}/bench_process_cuda_$(date -Iseconds).out.txt
@@ -197,6 +203,7 @@ bench spec variant="all" size_mem="16G": (build spec variant)
 				all | rknn )
 					# RKNN
 					if [ -d /sys/devices/platform/fdab0000.npu ]; then
+						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
 						{{proot}}/../lros/llama.cpp-rknn/build-rknn/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 							2> >(tee {{OUT_DIR}}/bench_process_rknn_$(date -Iseconds).err.txt >&2) \
 							| tee {{OUT_DIR}}/bench_process_rknn_$(date -Iseconds).out.txt
