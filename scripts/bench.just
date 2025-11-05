@@ -172,7 +172,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G": (build spec variant)
 
 			sleep 40
 
-			just ssh_local "/root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
+			just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
 				> {{OUT_DIR}}/bench_vm_$(date -Iseconds).out.txt 2> {{OUT_DIR}}/bench_vm_$(date -Iseconds).err.txt
 
 			sleep 40
