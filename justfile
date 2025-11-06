@@ -31,9 +31,9 @@ ssh_remote host="" cmd="":
 
 vm nb_cpu="1" size_mem="2G" cpu_type="big":
     #!/usr/bin/env bash
-    let "taskset_cores_start = {{ if cpu_type == "big" { 4 } else { 0 } }}"
+    let "taskset_cores_start = {{ if cpu_type == "big" { "4" } else { "0" } }}"
     let "taskset_cores_end = taskset_cores_start+{{nb_cpu}}-1"
-    taskset -c 0-$taskset_cores qemu-kvm \
+    taskset -c $taskset_cores_start-$taskset_cores_end qemu-kvm \
         -cpu host \
         -smp {{nb_cpu}} \
         -m {{size_mem}} \
@@ -68,18 +68,14 @@ vm-image-init:
     export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)
 
 get_models:
-	#!/usr/bin/env bash
-	mkdir -p {{models_dir}}
-	declare -A models={{models_to_get}}
-	for url in $models; do
-		name=$(echo $url | awk -F '/' '{print $(NF)})'
-		echo $name
-		#if [ -f "$models_dir/$name" ]; then
-		#    echo "$name already exists, skipping."
-		#else
-		#    wget -q --show-progress -O "{{models_dir}}/$name" "$url"
-		#fi
-	done
+  #!/usr/bin/env bash
+  mkdir -p {{models_dir}}
+  cd {{models_dir}}
+  declare -A models={{models_to_get}}
+  for url in $models; do
+    echo $url
+    wget -nc -q --show-progress "$url"
+  done
 
 clean_builds:
     #!/usr/bin/env bash
@@ -109,4 +105,3 @@ build_qemu:
     else
         echo "Qemu is already built"
     fi
-
