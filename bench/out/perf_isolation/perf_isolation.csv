@@ -1,0 +1,15 @@
+setup,type_interference,nb_thread_interference,time
+vm,none,0,134271.78
+vm,cpu,7,136250.26
+vm,cpu,8,169616.65
+vm,vm,7,212341.87
+vm,vm,8,258611.12
+vm,io,7,136777.59
+vm,io,8,136195.17
+process,none,0,93537.97
+process,cpu,7,95849.45
+process,cpu,8,114921.58
+process,vm,7,116601.31
+process,vm,8,151298.16
+process,io,7,94707.29
+process,io,8,94961.14

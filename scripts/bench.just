@@ -8,6 +8,7 @@ LLAMA_CPP_TARGETS := "llama-batched-bench"
 OUT_DIR := proot + "/../bench/out"
 
 EVAL_ARGS := "-npp 16,32 -ntg 128,256 -npl 1,2 -t 1 -ngl 20 --no-mmap --no-perf"
+EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 20 --no-mmap --no-perf"
 
 
 run_lros img out out_err cpu_type="big" size_mem="16G" :
@@ -239,3 +240,55 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 		{{proot}}/../lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 		2> >(tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).out.txt
+
+perf_isolation: (build "linux" "cpu") 
+  #!/usr/bin/env bash
+  set -ex
+  mkdir -p {{OUT_DIR}}/perf_isolation
+  echo "setup,type_interference,nb_thread_interference,time" > {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+  type_interference="cpu vm io"
+
+
+  just vm 1 4G big > /dev/null 2> /dev/null &
+  sleep 40
+  
+  echo -n "vm,none,0," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+  sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+  just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+  
+  for ti in $type_interference
+  do 
+    echo -n "vm,$ti,7," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+    taskset -c 0-3,5-7 stress --$ti 7 > /dev/null 2> /dev/null &
+    just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo kill -9 $(pidof stress)
+    
+    echo -n "vm,$ti,8," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+    taskset -c 0-7 stress --$ti 8 > /dev/null 2> /dev/null &
+    just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo kill -9 $(pidof stress)
+  done
+
+  just ssh_local "poweroff"
+  sleep 40
+
+  echo -n "process,none,0," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+  sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+  taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+
+  for ti in $type_interference
+  do    
+    echo -n "process,$ti,7," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+    taskset -c 0-3,5-7 stress --$ti 7 > /dev/null 2> /dev/null &
+    taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo kill -9 $(pidof stress)
+    
+    echo -n "process,$ti,8," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+    taskset -c 0-7 stress --$ti 8 > /dev/null 2> /dev/null &
+    taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+    sudo kill -9 $(pidof stress)
+  done
