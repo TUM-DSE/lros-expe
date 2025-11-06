@@ -10,7 +10,8 @@ import os
 import numpy as np
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-result_dir = os.path.join(dir_path, "../../benchmarks/results")
+result_dir = os.path.join(dir_path, "../../bench/out/")
+plots_dir = os.path.join(dir_path, "../../bench/plots")
 mpl.use("Agg")
 mpl.rcParams["text.latex.preamble"] = r"\usepackage{amsmath}"
 mpl.rcParams["pdf.fonttype"] = 42
