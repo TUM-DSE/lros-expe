@@ -1,0 +1,13 @@
+diff --git a/generate-version.sh b/generate-version.sh
+index 56811f1..086d012 100755
+--- a/generate-version.sh
++++ b/generate-version.sh
+@@ -13,7 +13,7 @@ if [ -f "${SRC_DIR}/.version" ]; then
+ 	exit 0
+ fi
+ 
+-if [ ! -d "${SRC_DIR}/.git" ]; then
++if [ ! -d "${SRC_DIR}/../.git/modules/vaccel" ]; then
+ 	echo ${DEFAULT_VERSION}
+ 	exit 1
+ fi

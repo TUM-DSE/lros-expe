@@ -74,7 +74,7 @@ in
   nix.extraOptions = ''
       experimental-features = nix-command flakes
   '';
-  nix.package = pkgs.nixFlakes;
+  nix.package = pkgs.nixVersions.stable;
   environment.systemPackages = [
     pkgs.vim
     pkgs.git
@@ -87,6 +87,7 @@ in
     pkgs.gcc
     pkgs.llama-cpp
     pkgs.flamegraph
+    pkgs.docker
     # Add more packages here if needed
   ];
 

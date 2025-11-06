@@ -22,7 +22,7 @@ cd scripts/common; git apply ../../submodules.patch; cd ../..
 meson setup --buildtype=release build
 meson compile -C build
 meson install -C build --destdir=out
-sed -i "s/prefix=/prefix=\/home\/$(whoami)\/lros-expe\/vaccel\/build\/out/" /home/$(whoami)/lros-expe/vaccel/build/out/usr/local/lib/aarch64-linux-gnu/pkgconfig/vaccel.pc
+sed -i "s/prefix=/prefix=\/home\/$(whoami)\/lros-expe\/vaccel\/build\/out/" /home/$(whoami)/lros-expe/vaccel/build/out/usr/local/lib/pkgconfig/vaccel.pc
 ```
 
 2. lros-qemu
@@ -42,3 +42,17 @@ make -j
 cmake -B build
 cmake --build build --config Release -j
 ```
+
+
+## Using LoRA adapters with the models
+
+1. Find some suitable adapters for the model you want to infer: For example for the Llama-3.1-1b-Instruct model you can use [Llama-TOS](https://huggingface.co/CodeHima/Llama_TOS) and [MentalChat-16K](https://huggingface.co/khazarai/MentalChat-16K).
+2. Clone the repo containg the adapter_config.json and adapter_model.safetensors files.
+3. Convert the LoRA into GGUF format using the convert_lora_to_gguf.py script from the llama.cpp repo
+   1. Install the requirements using `pip install -r requirements/requirements-convert_lora_to_gguf.txt`
+   2. `./convert_lora_to_gguf.py --outfile <lora-name>.gguf --outtype f16 <cloned lora repo>`
+4. Start llama-server with the LoRAs: Add `--lora-scaled path/to/lora.gguf 0` for every LoRA you want to supply.
+   1. Note: It should be possible to just do `--lora path/to/lora.gguf` and additionally add `--lora-init-without-apply` but that did not work in my tests
+5. Modify the applied LoRA(s) using:
+   1. A `POST` request to `/lora-adapters` supplying `[{"id": 0, "scale": 0.2},{"id": 1, "scale": 0.8}]` as the request body (not included LoRAs are automatically scaled to 0).
+   2. Per request by adding a `lora` parameter to the json request body, that contains an array like above

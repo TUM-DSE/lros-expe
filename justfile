@@ -2,8 +2,7 @@ proot := justfile_directory()
 qemu_ssh_port := "2222"
 
 models_dir := proot+"/models"
-models_to_get := (["Llama-3.2-1B-Instruct-f16.gguf"] = "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-f16.gguf"
-				)
+models_to_get := "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-f16.gguf"
 
 default:
     @just --choose
@@ -11,7 +10,7 @@ default:
 help:
     just --list
 
-ssh COMMAND="":
+ssh_local cmd="":
     ssh \
     -i {{proot}}/nix/keyfile \
     -o StrictHostKeyChecking=no \
@@ -19,11 +18,21 @@ ssh COMMAND="":
     -o IdentityAgent=/dev/null \
     -F /dev/null \
     -p {{qemu_ssh_port}} \
-    root@localhost -- "{{COMMAND}}"
+    root@localhost -- "{{cmd}}"
 
-vm nb_cpu="1" size_mem="2G":
+ssh_remote host="" cmd="":
+    ssh \
+    -i {{proot}}/nix/keyfile \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o IdentityAgent=/dev/null \
+    -F /dev/null \
+    {{host}} -- "{{cmd}}"
+
+vm nb_cpu="1" size_mem="2G" cpu_type="big":
     #!/usr/bin/env bash
-    let "taskset_cores = {{nb_cpu}}-1"
+    let "taskset_cores_start = {{ if cpu_type == "big" { 4 } else { 0 } }}"
+    let "taskset_cores_end = taskset_cores_start+{{nb_cpu}}-1"
     taskset -c 0-$taskset_cores qemu-kvm \
         -cpu host \
         -smp {{nb_cpu}} \
@@ -71,3 +80,33 @@ get_models:
 		#    wget -q --show-progress -O "{{models_dir}}/$name" "$url"
 		#fi
 	done
+
+clean_builds:
+    #!/usr/bin/env bash
+    rm -rf vaccel/build
+    rm -rf lros-qemu/build
+
+build_vaccel:
+    #!/usr/bin/env bash
+    if [ ! -d vaccel/build ]; then
+        cd vaccel/scripts/common; git apply ../../submodules.patch 2> /dev/null; cd ../..
+        meson setup --buildtype=release build
+        meson compile -C build
+        meson install -C build --destdir=out
+        sed -i "s/prefix=/prefix=$(echo {{proot}} | sed 's/\//\\\//g')\/vaccel\/build\/out/" {{proot}}/vaccel/build/out/usr/local/lib/pkgconfig/vaccel.pc
+        echo "Finished building vAccel"
+    else
+        echo "vAccel is already built"
+    fi
+
+build_qemu:
+    #!/usr/bin/env bash
+    if [ ! -d lros-qemu/build ]; then
+        cd lros-qemu; mkdir build; cd build
+        CFLAGS=-Wno-error PKG_CONFIG_PATH={{proot}}/vaccel/build/out/usr/local/lib/pkgconfig ../configure --target-list=aarch64-softmmu --enable-virtfs
+        make -j
+        echo "Finished building Qemu"
+    else
+        echo "Qemu is already built"
+    fi
+

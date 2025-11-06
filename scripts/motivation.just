@@ -19,10 +19,10 @@ kvcache:
 			just vm $c $m > /dev/null 2> /dev/null &
 			sleep 40
 			
-			just ssh "echo 1 > /proc/sys/vm/drop_caches; /root/llama.cpp/build/bin/llama-cli -m {{models_dir}}/{{model}} -p {{prompt}} -t $c -n '{{nb_tokens_to_predict}}' -no-cnv" > {{out_dir}}/raw_"$c"_"$m".txt 
+			just ssh_local "echo 1 > /proc/sys/vm/drop_caches; /root/llama.cpp/build/bin/llama-cli -m {{models_dir}}/{{model}} -p {{prompt}} -t $c -n '{{nb_tokens_to_predict}}' -no-cnv" > {{out_dir}}/raw_"$c"_"$m".txt 
 			sleep 10
-			just ssh "echo 1 > /proc/sys/vm/drop_caches; perf record -F 99 -o {{out_dir}}/perf_$c_$m.data -ag -- /root/llama.cpp/build/bin/llama-cli -m {{models_dir}}/{{model}} -p '{{prompt}}' -t $c -n {{nb_tokens_to_predict}} -no-cnv"
+			just ssh_local "echo 1 > /proc/sys/vm/drop_caches; perf record -F 99 -o {{out_dir}}/perf_$c_$m.data -ag -- /root/llama.cpp/build/bin/llama-cli -m {{models_dir}}/{{model}} -p '{{prompt}}' -t $c -n {{nb_tokens_to_predict}} -no-cnv"
 			sleep 10
-			just ssh "poweroff"
+			just ssh_local "poweroff"
 		done
 	done
