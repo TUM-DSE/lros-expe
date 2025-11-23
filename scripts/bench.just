@@ -250,7 +250,7 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 		2> >(tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).out.txt
 
-paging cpu_type="big": (build "linux" "cpu")
+paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 	#!/usr/bin/env bash
 
 	set -ex
@@ -260,9 +260,38 @@ paging cpu_type="big": (build "linux" "cpu")
 	d=$(date -Iseconds)
 
 	for m in "4G" "2G" "1G" "512M"; do
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-mmap" run_vm {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".out.txt {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".err.txt $m {{cpu_type}}
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-prefetch" run_vm {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".out.txt {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".err.txt $m {{cpu_type}}
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf" run_vm {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".out.txt {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".err.txt $m {{cpu_type}}
+		# Linux VM
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-mmap" run_vm \
+			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".out.txt \
+			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".err.txt \
+			 $m {{cpu_type}}
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-prefetch" run_vm \
+			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".out.txt \
+			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".err.txt \
+			 $m {{cpu_type}}
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf" run_vm \
+			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".out.txt \
+			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".err.txt \
+			 $m {{cpu_type}}
+
+		# LROS
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-mmap" run_lros \
+			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".errout.txt \
+			$m {{cpu_type}}
+		# Fix merged output
+		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt
+
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf" run_lros \
+			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".errout.txt \
+			$m {{cpu_type}}
+		# Fix merged output
+		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt
 	done
 
 perf_isolation: (build "linux" "cpu")
