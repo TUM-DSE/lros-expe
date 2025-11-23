@@ -11,6 +11,24 @@ EVAL_ARGS := "-npp 16,32 -ntg 128,256 -npl 1,2 -t 1 -ngl 20 --no-mmap --no-perf"
 EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 20 --no-mmap --no-perf"
 
 
+run_vm out out_err size_mem="16G" cpu_type="big" additional_vm_args="":
+	#!/usr/bin/env bash
+
+	set -e
+
+	just vm 1 {{size_mem}} {{cpu_type}} '{{additional_vm_args}}' > /dev/null 2> /dev/null &
+
+	sleep 40
+
+	just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
+		> {{out}} 2> {{out_err}} || echo "Command exited with error code $?"
+
+	sleep 5
+
+	just ssh_local "poweroff" || ! jobs -p %% >/dev/null 2>/dev/null
+
+	sleep 10
+
 run_lros img out out_err cpu_type="big" size_mem="16G" :
 	taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} qemu-system-aarch64 \
 		-kernel {{img}} \
@@ -169,16 +187,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G": (build spec variant)
 		;;
 
 		linux-vm | vm)
-			just vm 1 {{size_mem}} > /dev/null 2> /dev/null &
-
-			sleep 40
-
-			just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
-				> {{OUT_DIR}}/bench_vm_$(date -Iseconds).out.txt 2> {{OUT_DIR}}/bench_vm_$(date -Iseconds).err.txt
-
-			sleep 40
-
-			just ssh_local "poweroff"
+			just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_$(date -Iseconds).out.txt {{OUT_DIR}}/bench_vm_$(date -Iseconds).err.txt {{size_mem}} {{cpu_type}}
 		;;
 
 		linux | process)
@@ -241,7 +250,22 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 		2> >(tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).out.txt
 
-perf_isolation: (build "linux" "cpu") 
+paging cpu_type="big": (build "linux" "cpu")
+	#!/usr/bin/env bash
+
+	set -ex
+
+	mkdir -p {{OUT_DIR}}/paging
+
+	d=$(date -Iseconds)
+
+	for m in "4G" "2G" "1G" "512M"; do
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-mmap" run_vm {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".out.txt {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".err.txt $m {{cpu_type}}
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-prefetch" run_vm {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".out.txt {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".err.txt $m {{cpu_type}}
+		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf" run_vm {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".out.txt {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".err.txt $m {{cpu_type}}
+	done
+
+perf_isolation: (build "linux" "cpu")
   #!/usr/bin/env bash
   set -ex
   mkdir -p {{OUT_DIR}}/perf_isolation

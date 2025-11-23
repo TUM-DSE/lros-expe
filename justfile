@@ -29,7 +29,7 @@ ssh_remote host="" cmd="":
     -F /dev/null \
     {{host}} -- "{{cmd}}"
 
-vm nb_cpu="1" size_mem="2G" cpu_type="big":
+vm nb_cpu="1" size_mem="2G" cpu_type="big" additional_args="":
     #!/usr/bin/env bash
     let "taskset_cores_start = {{ if cpu_type == "big" { "4" } else { "0" } }}"
     let "taskset_cores_end = taskset_cores_start+{{nb_cpu}}-1"
@@ -48,7 +48,7 @@ vm nb_cpu="1" size_mem="2G" cpu_type="big":
         -drive file={{proot}}/VMs/linux-image.qcow2 \
         -net nic,netdev=user.0,model=virtio \
         -netdev user,id=user.0,hostfwd=tcp:127.0.0.1:{{qemu_ssh_port}}-:22 \
-        -nographic
+        -nographic {{additional_args}}
 
 vm-image-init:
     #!/usr/bin/env bash
