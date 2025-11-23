@@ -51,7 +51,8 @@ def get_latest_file(directory, prefix, identifier, variant, spec, flavor):
 def load_data() -> pd.DataFrame:
     eval_path = os.path.join(result_dir, "paging")
     dfs = []
-    specs = ["prefetch", "mmap", "read", "lros"]
+    specs = ["prefetch", "mmap", "read", "lrosread", "lrosprefetch"]
+    specs_names = ["mmap + POPULATE", "mmap", "read", "lros read", "lros mmap prefetch"]
     variants = ["4G", "2G"]
     file = get_latest_file(eval_path, "bench", "paging", variants[0], specs[0], "out")
     for spec in specs:
@@ -82,7 +83,7 @@ def load_data() -> pd.DataFrame:
             else:
                 df1s.append(pd.DataFrame())
         dfs.append(pd.concat(df1s, keys=variants, axis=0))
-    return pd.concat(dfs, keys=specs, axis=0).reset_index()
+    return pd.concat(dfs, keys=specs_names, axis=0).reset_index()
 
 
 def main():
