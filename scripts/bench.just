@@ -149,42 +149,44 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false": (buil
 		exit 1
 	fi
 
+	d=$(date -Iseconds)
+
 	case {{lowercase(spec)}} in
 		lros)
 			case {{lowercase(variant)}} in
 				all | vaccel )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).power.txt & fi
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-vaccel_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).err.txt \
+						{{OUT_DIR}}/bench_lros_vaccel_$d.out.txt \
+						{{OUT_DIR}}/bench_lros_vaccel_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }}
 					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
 				all | vaccel-novec )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).power.txt & fi
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel-novec_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-vaccel-novec_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).err.txt \
+						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.out.txt \
+						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }}
 					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
 				all | cpu )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).power.txt & fi
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).err.txt \
+						{{OUT_DIR}}/bench_lros_cpu_$d.out.txt \
+						{{OUT_DIR}}/bench_lros_cpu_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }}
 					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
 				all | cpu-novec )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).power.txt & fi
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu-novec_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-cpu-novec_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).out.txt \
-						{{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).err.txt \
+						{{OUT_DIR}}/bench_lros_cpu-novec_$d.out.txt \
+						{{OUT_DIR}}/bench_lros_cpu-novec_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }}
 					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
@@ -197,7 +199,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false": (buil
 		;;
 
 		linux-vm | vm)
-			just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_$(date -Iseconds).out.txt {{OUT_DIR}}/bench_vm_$(date -Iseconds).err.txt {{size_mem}} {{cpu_type}}
+			just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_$d.out.txt {{OUT_DIR}}/bench_vm_$d.err.txt {{size_mem}} {{cpu_type}}
 		;;
 
 		linux | process)
@@ -205,16 +207,16 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false": (buil
 				all | cpu )
 					taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
 					{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-						2> >(tee {{OUT_DIR}}/bench_process_cpu_$(date -Iseconds).err.txt >&2) \
-						| tee {{OUT_DIR}}/bench_process_cpu_$(date -Iseconds).out.txt
+						2> >(tee {{OUT_DIR}}/bench_process_cpu_$d.err.txt >&2) \
+						| tee {{OUT_DIR}}/bench_process_cpu_$d.out.txt
 				;;&
 				all | cuda )
 					# CUDA
 					if [ -d /proc/driver/nvidia/ ]; then
 						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
 						{{proot}}/../lros/llama.cpp-rknn/build-cuda/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-							2> >(tee {{OUT_DIR}}/bench_process_cuda_$(date -Iseconds).err.txt >&2) \
-							| tee {{OUT_DIR}}/bench_process_cuda_$(date -Iseconds).out.txt
+							2> >(tee {{OUT_DIR}}/bench_process_cuda_$d.err.txt >&2) \
+							| tee {{OUT_DIR}}/bench_process_cuda_$d.out.txt
 					elif [ {{lowercase(variant)}} -eq "cuda" ]; then
 						echo "Cannot execute CUDA on this device. Could not find GPU driver." >2
 						exit 1
@@ -225,8 +227,8 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false": (buil
 					if [ -d /sys/devices/platform/fdab0000.npu ]; then
 						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
 						{{proot}}/../lros/llama.cpp-rknn/build-rknn/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-							2> >(tee {{OUT_DIR}}/bench_process_rknn_$(date -Iseconds).err.txt >&2) \
-							| tee {{OUT_DIR}}/bench_process_rknn_$(date -Iseconds).out.txt
+							2> >(tee {{OUT_DIR}}/bench_process_rknn_$d.err.txt >&2) \
+							| tee {{OUT_DIR}}/bench_process_rknn_$d.out.txt
 					elif [ {{lowercase(variant)}} -eq "rknn" ]; then
 						echo "Cannot execute RKNN on this device. Could not find NPU." >2
 						exit 1
