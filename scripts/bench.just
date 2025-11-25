@@ -279,19 +279,19 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".errout.txt \
-			$m {{cpu_type}}
+			{{cpu_type}} $m
 		# Fix merged output
 		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt || test $? = 1;
 
 		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf" run_lros \
 			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".errout.txt \
-			$m {{cpu_type}}
+			{{cpu_type}} $m
 		# Fix merged output
-		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt
+		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".err.txt || test $? = 1;
 	done
 
 perf_isolation: (build "linux" "cpu")
