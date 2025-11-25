@@ -125,7 +125,7 @@ build spec variant:
 		;;
 	esac
 
-bench spec variant="all" cpu_type="big" size_mem="16G": (build spec variant)
+bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false": (build spec variant)
 	#!/usr/bin/env bash
 
 	set -ex
@@ -138,8 +138,10 @@ bench spec variant="all" cpu_type="big" size_mem="16G": (build spec variant)
 	# Detect if we are on NPU or GPU system
 	if [ -d /sys/devices/platform/fdab0000.npu ]; then
 		export VACCEL_PLUGINS=$VACCEL_PLUGINS_RKNN
+		powerlogger="measure_orangepi"
 	elif [ -d /proc/driver/nvidia/ ]; then
 		export VACCEL_PLUGINS=$VACCEL_PLUGINS_CUDA
+		powerlogger="measure_jetson"
 	fi
 
 	if [ ! -f {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf ]; then
@@ -151,32 +153,40 @@ bench spec variant="all" cpu_type="big" size_mem="16G": (build spec variant)
 		lros)
 			case {{lowercase(variant)}} in
 				all | vaccel )
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-vaccel_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).out.txt \
 						{{OUT_DIR}}/bench_lros_vaccel_$(date -Iseconds).err.txt \
-						{{ cpu_type }}
+						{{ cpu_type }} {{ size_mem }}
+					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
 				all | vaccel-novec )
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-vaccel-novec_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).out.txt \
 						{{OUT_DIR}}/bench_lros_vaccel-novec_$(date -Iseconds).err.txt \
-						{{ cpu_type }}
+						{{ cpu_type }} {{ size_mem }}
+					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
 				all | cpu )
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_cpul_$(date -Iseconds).out.txt \
+						{{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).out.txt \
 						{{OUT_DIR}}/bench_lros_cpu_$(date -Iseconds).err.txt \
-						{{ cpu_type }}
+						{{ cpu_type }} {{ size_mem }}
+					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
 				all | cpu-novec )
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).power.txt & fi
 					just -f {{source_file()}} run_lros \
 						{{LROS_PATH}}/.unikraft/build/bench-cpu-novec_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).out.txt \
 						{{OUT_DIR}}/bench_lros_cpu-novec_$(date -Iseconds).err.txt \
-						{{ cpu_type }}
+						{{ cpu_type }} {{ size_mem }}
+					if [ $log_power = true ]; then kill -15 %%; fi
 				;;&
 				all | vaccel | vaccel-novec | cpu | cpu-novec)
 				;;
