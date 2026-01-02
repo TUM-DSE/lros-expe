@@ -154,7 +154,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 	case {{lowercase(spec)}} in
 		lros)
 			if [ ! -f {{proot}}/../config/mat_kernel_size_$batch_size.json ]; then
-				./scripts/mat_kernel_size_generator.py {{proot}}/../config/mat_kernel_size_$batch_size.json -b $batch_size
+				{{proot}}/mat_kernel_size_generator.py {{proot}}/../config/mat_kernel_size_$batch_size.json -b $batch_size
 			fi
 			cp -fl {{proot}}/../config/mat_kernel_size_$batch_size.json {{proot}}/../config/mat_kernel_size.json
 			case {{lowercase(variant)}} in
