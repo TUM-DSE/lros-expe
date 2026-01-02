@@ -278,23 +278,26 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 
 	d=$(date -Iseconds)
 
-	for m in "4G" "2G" "1G" "512M"; do
+	# Shared arguments (16 prompt token, 8 text gen token, 1 batch, 1 thread, no detailed integrated timings)
+	args="-npp 16 -ntg 8 -npl 1 -t 1 --no-perf"
+
+	for m in "16G" "2G"; do
 		# Linux VM
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-mmap" run_vm \
+		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_vm \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".out.txt \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".err.txt \
 			 $m {{cpu_type}}
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-prefetch" run_vm \
+		just -f {{source_file()}} EVAL_ARGS="$args --no-prefetch" run_vm \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".out.txt \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".err.txt \
 			 $m {{cpu_type}}
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf" run_vm \
+		just -f {{source_file()}} EVAL_ARGS="$args --no-perf" run_vm \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".out.txt \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".err.txt \
 			 $m {{cpu_type}}
 
 		# LROS
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf --no-mmap" run_lros \
+		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_lros \
 			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".errout.txt \
@@ -303,7 +306,7 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
 			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt || test $? = 1;
 
-		just -f {{source_file()}} EVAL_ARGS="-npp 16 -ntg 1 -npl 1 -t 1 -ngl 20 --no-perf" run_lros \
+		just -f {{source_file()}} EVAL_ARGS="$args" run_lros \
 			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".errout.txt \
