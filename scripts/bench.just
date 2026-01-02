@@ -306,7 +306,13 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
 			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt || test $? = 1;
 
-		just -f {{source_file()}} EVAL_ARGS="$args" run_lros \
+		if [[ "$m" == "16G" ]]; then
+			buf_size=4096
+		else
+			buf_size=64
+		fi
+
+		just -f {{source_file()}} EVAL_ARGS="libukvmem.prefetch_size=$buf_size -- $args" run_lros \
 			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".errout.txt \
