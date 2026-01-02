@@ -141,7 +141,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 		powerlogger="measure_orangepi"
 	elif [ -d /proc/driver/nvidia/ ]; then
 		export VACCEL_PLUGINS=$VACCEL_PLUGINS_CUDA
-		powerlogger="measure_jetson"
+		powerlogger="measure_jetson 0.1"
 	fi
 
 	if [ ! -f {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf ]; then
@@ -165,7 +165,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 						{{OUT_DIR}}/bench_lros_vaccel_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_vaccel_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then kill -15 %%; fi
+					if [ $log_power = true ]; then pkill -P $!; fi
 				;;&
 				all | vaccel-novec )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel-novec_$d.power.txt & fi
@@ -174,7 +174,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then kill -15 %%; fi
+					if [ $log_power = true ]; then pkill -P $!; fi
 				;;&
 				all | cpu )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu_$d.power.txt & fi
@@ -183,7 +183,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 						{{OUT_DIR}}/bench_lros_cpu_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_cpu_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then kill -15 %%; fi
+					if [ $log_power = true ]; then pkill -P $!; fi
 				;;&
 				all | cpu-novec )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu-novec_$d.power.txt & fi
@@ -192,7 +192,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 						{{OUT_DIR}}/bench_lros_cpu-novec_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_cpu-novec_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then kill -15 %%; fi
+					if [ $log_power = true ]; then pkill -P $!; fi
 				;;&
 				all | vaccel | vaccel-novec | cpu | cpu-novec)
 				;;
