@@ -248,7 +248,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 				all | cuda )
 					# CUDA
 					if [ -d /proc/driver/nvidia/ ]; then
-						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
+						LD_LIBRARY_PATH=/run/opengl-driver/lib taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
 						{{proot}}/../lros/llama.cpp-rknn/build-cuda/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 							-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 							2> >(tee {{OUT_DIR}}/bench_process_cuda_$d.err.txt >&2) \
