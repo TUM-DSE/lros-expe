@@ -210,10 +210,16 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 		linux-vm | vm)
 			case {{lowercase(variant)}} in
 				all | cpu )
-					just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_cpu_$d.out.txt {{OUT_DIR}}/bench_vm_cpu_$d.err.txt build {{size_mem}} {{cpu_type}}
+					just -f {{source_file()}} EVAL_ARGS="{{EVAL_ARGS}} -npl {{batch_size}}" run_vm \
+					{{OUT_DIR}}/bench_vm_cpu_$d.out.txt \
+					{{OUT_DIR}}/bench_vm_cpu_$d.err.txt \
+					build {{size_mem}} {{cpu_type}}
 				;;&
 				all | cpu-novec )
-					just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_cpu_$d.out.txt {{OUT_DIR}}/bench_vm_cpu_$d.err.txt build-novec {{size_mem}} {{cpu_type}}
+					just -f {{source_file()}} EVAL_ARGS="{{EVAL_ARGS}} -npl {{batch_size}}" run_vm \
+					{{OUT_DIR}}/bench_vm_cpu-novec_$d.out.txt \
+					{{OUT_DIR}}/bench_vm_cpu-novec_$d.err.txt \
+					build-novec {{size_mem}} {{cpu_type}}
 				;;&
 				all | cpu | cpu-novec)
 				;;
@@ -227,14 +233,14 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 			case {{lowercase(variant)}} in
 				all | cpu )
 					taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
-					{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} {{batch_size}} \
+					{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 						-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 						2> >(tee {{OUT_DIR}}/bench_process_cpu_$d.err.txt >&2) \
 						| tee {{OUT_DIR}}/bench_process_cpu_$d.out.txt
 				;;&
 				all | cpu-novec )
 					taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
-					{{proot}}/../lros/llama.cpp-rknn/build-novec/bin/llama-batched-bench {{EVAL_ARGS}} {{batch_size}} \
+					{{proot}}/../lros/llama.cpp-rknn/build-novec/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 						-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 						2> >(tee {{OUT_DIR}}/bench_process_cpu-novec_$d.err.txt >&2) \
 						| tee {{OUT_DIR}}/bench_process_cpu_$d.out.txt
@@ -243,7 +249,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 					# CUDA
 					if [ -d /proc/driver/nvidia/ ]; then
 						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
-						{{proot}}/../lros/llama.cpp-rknn/build-cuda/bin/llama-batched-bench {{EVAL_ARGS}} {{batch_size}} \
+						{{proot}}/../lros/llama.cpp-rknn/build-cuda/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 							-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 							2> >(tee {{OUT_DIR}}/bench_process_cuda_$d.err.txt >&2) \
 							| tee {{OUT_DIR}}/bench_process_cuda_$d.out.txt
@@ -256,7 +262,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 					# RKNN
 					if [ -d /sys/devices/platform/fdab0000.npu ]; then
 						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
-						{{proot}}/../lros/llama.cpp-rknn/build-rknn/bin/llama-batched-bench {{EVAL_ARGS}}  {{batch_size}} \
+						{{proot}}/../lros/llama.cpp-rknn/build-rknn/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 							-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 							2> >(tee {{OUT_DIR}}/bench_process_rknn_$d.err.txt >&2) \
 							| tee {{OUT_DIR}}/bench_process_rknn_$d.out.txt
