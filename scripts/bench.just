@@ -76,7 +76,7 @@ build spec variant:
 				all | vaccel | vaccel-novec | cpu | cpu-novec)
 				;;
 				*)
-					echo "Unknown variant {{variant}} for spec {{spec}}" >2
+					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
 				;;
 			esac
 		;;
@@ -107,7 +107,7 @@ build spec variant:
 							[ -f {{LROS_PATH}}/llama.cpp-rknn/build-cuda/CMakeCache.txt ] || cmake -B build-cuda . -DGGML_CUDA=ON -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 							cmake --build build-cuda -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
 						elif [ {{lowercase(variant)}} == "cuda" ]; then
-							echo "Cannot build CUDA. Could not find nvcc." >2
+							echo "Cannot build CUDA. Could not find nvcc." >&2
 							exit 1
 						fi
 					;;&
@@ -119,14 +119,14 @@ build spec variant:
 					all | cpu | cpu-novec | cuda | rknn)
 					;;
 					*)
-						echo "Unknown variant {{variant}} for spec {{spec}}" >2
+						echo "Unknown variant {{variant}} for spec {{spec}}" >&2
 					;;
 				esac
 			fi
 		;;
 
 		* )
-			echo "Unknown spec {{spec}}" >2
+			echo "Unknown spec {{spec}}" >&2
 		;;
 	esac
 
@@ -202,7 +202,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 				all | vaccel | vaccel-novec | cpu | cpu-novec)
 				;;
 				*)
-					echo "Unknown variant {{variant}} for spec {{spec}}" >2
+					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
 				;;
 			esac
 		;;
@@ -218,7 +218,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 				all | cpu | cpu-novec)
 				;;
 				*)
-					echo "Unknown variant {{variant}} for spec {{spec}}" >2
+					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
 				;;
 			esac
 		;;
@@ -248,7 +248,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 							2> >(tee {{OUT_DIR}}/bench_process_cuda_$d.err.txt >&2) \
 							| tee {{OUT_DIR}}/bench_process_cuda_$d.out.txt
 					elif [ {{lowercase(variant)}} == "cuda" ]; then
-						echo "Cannot execute CUDA on this device. Could not find GPU driver." >2
+						echo "Cannot execute CUDA on this device. Could not find GPU driver." >&2
 						exit 1
 					fi
 				;;&
@@ -261,14 +261,14 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 							2> >(tee {{OUT_DIR}}/bench_process_rknn_$d.err.txt >&2) \
 							| tee {{OUT_DIR}}/bench_process_rknn_$d.out.txt
 					elif [ {{lowercase(variant)}} == "rknn" ]; then
-						echo "Cannot execute RKNN on this device. Could not find NPU." >2
+						echo "Cannot execute RKNN on this device. Could not find NPU." >&2
 						exit 1
 					fi
 				;;&
 				all | cpu | cuda | rknn)
 				;;
 				*)
-					echo "Unknown variant {{variant}} for spec {{spec}}" >2
+					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
 				;;
 			esac
 		;;
