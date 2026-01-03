@@ -11,7 +11,7 @@ EVAL_ARGS := "-npp 16,32 -ntg 128,256 -t 1 -ngl 20 --no-mmap --no-perf"
 EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 20 --no-mmap --no-perf"
 
 
-run_vm out out_err size_mem="16G" cpu_type="big" additional_vm_args="":
+run_vm out out_err variant="build" size_mem="16G" cpu_type="big" additional_vm_args="":
 	#!/usr/bin/env bash
 
 	set -e
@@ -20,7 +20,7 @@ run_vm out out_err size_mem="16G" cpu_type="big" additional_vm_args="":
 
 	sleep 40
 
-	just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
+	just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/{{variant}}/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
 		> {{out}} 2> {{out_err}} || echo "Command exited with error code $?"
 
 	sleep 5
@@ -91,6 +91,11 @@ build spec variant:
 						[ -f {{LROS_PATH}}/llama.cpp-rknn/build/CMakeCache.txt ] || cmake -B build . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 						cmake --build build -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
 					;;&
+					all | cpu-novec )
+						# CPU-only
+						[ -f {{LROS_PATH}}/llama.cpp-rknn/build-novec/CMakeCache.txt ] || cmake -B build-novec . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_LLAMAFILE=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
+						cmake --build build-novec -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
+					;;&
 					cpu-thp )
 						# CPU with huge page
 						[ -f {{LROS_PATH}}/llama.cpp-rknn/build-thp/CMakeCache.txt ] || cmake -B build-thp . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DGGML_THP=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
@@ -111,7 +116,7 @@ build spec variant:
 						[ -f {{LROS_PATH}}/llama.cpp-rknn/build-rknn/CMakeCache.txt ] || cmake -B build-rknn . -DGGML_CUDA=OFF -DGGML_RKNN=ON -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 						cmake --build build-rknn -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
 					;;&
-					all | cpu | cuda | rknn)
+					all | cpu | cpu-novec | cuda | rknn)
 					;;
 					*)
 						echo "Unknown variant {{variant}} for spec {{spec}}" >2
@@ -203,7 +208,19 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 		;;
 
 		linux-vm | vm)
-			just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_$d.out.txt {{OUT_DIR}}/bench_vm_$d.err.txt {{size_mem}} {{cpu_type}}
+			case {{lowercase(variant)}} in
+				all | cpu )
+					just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_cpu_$d.out.txt {{OUT_DIR}}/bench_vm_cpu_$d.err.txt build {{size_mem}} {{cpu_type}}
+				;;&
+				all | cpu-novec )
+					just -f {{source_file()}} run_vm {{OUT_DIR}}/bench_vm_cpu_$d.out.txt {{OUT_DIR}}/bench_vm_cpu_$d.err.txt build-novec {{size_mem}} {{cpu_type}}
+				;;&
+				all | cpu | cpu-novec)
+				;;
+				*)
+					echo "Unknown variant {{variant}} for spec {{spec}}" >2
+				;;
+			esac
 		;;
 
 		linux | process)
@@ -213,6 +230,13 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 					{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} {{batch_size}} \
 						-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 						2> >(tee {{OUT_DIR}}/bench_process_cpu_$d.err.txt >&2) \
+						| tee {{OUT_DIR}}/bench_process_cpu_$d.out.txt
+				;;&
+				all | cpu-novec )
+					taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
+					{{proot}}/../lros/llama.cpp-rknn/build-novec/bin/llama-batched-bench {{EVAL_ARGS}} {{batch_size}} \
+						-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+						2> >(tee {{OUT_DIR}}/bench_process_cpu-novec_$d.err.txt >&2) \
 						| tee {{OUT_DIR}}/bench_process_cpu_$d.out.txt
 				;;&
 				all | cuda )
@@ -286,15 +310,15 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_vm \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".out.txt \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".err.txt \
-			 $m {{cpu_type}}
+			 build $m {{cpu_type}}
 		just -f {{source_file()}} EVAL_ARGS="$args --no-prefetch" run_vm \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".out.txt \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".err.txt \
-			 $m {{cpu_type}}
+			 build $m {{cpu_type}}
 		just -f {{source_file()}} EVAL_ARGS="$args --no-perf" run_vm \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".out.txt \
 			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".err.txt \
-			 $m {{cpu_type}}
+			 build $m {{cpu_type}}
 
 		# LROS
 		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_lros \

@@ -1,2 +1,4 @@
 bench_*.out.txt
 bench_*.err.txt
+bench_*.errout.txt
+bench_*.power.txt
