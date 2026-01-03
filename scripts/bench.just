@@ -62,16 +62,16 @@ build spec variant:
 			cd {{LROS_PATH}}
 			case {{lowercase(variant)}} in
 				all | vaccel )
-					kraft build -t bench-vaccel --no-configure
+					kraft build -t bench-vaccel --no-configure -o .unikraft/build-vaccel
 				;;&
 				all | vaccel-novec )
-					kraft build -t bench-vaccel-novec --no-configure
+					kraft build -t bench-vaccel-novec --no-configure -o .unikraft/build-vaccel-novec
 				;;&
 				all | cpu )
-					kraft build -t bench-cpu --no-configure
+					kraft build -t bench-cpu --no-configure -o .unikraft/build-cpu
 				;;&
 				all | cpu-novec )
-					kraft build -t bench-cpu-novec --no-configure
+					kraft build -t bench-cpu-novec --no-configure -o .unikraft/build-cpu-novec
 				;;&
 				all | vaccel | vaccel-novec | cpu | cpu-novec)
 				;;
@@ -166,7 +166,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 				all | vaccel )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build/bench-vaccel_qemu-arm64 \
+						{{LROS_PATH}}/.unikraft/build-vaccel/bench-vaccel_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_vaccel_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_vaccel_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
@@ -175,7 +175,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 				all | vaccel-novec )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel-novec_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build/bench-vaccel-novec_qemu-arm64 \
+						{{LROS_PATH}}/.unikraft/build-vaccel-novec/bench-vaccel-novec_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
@@ -184,7 +184,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 				all | cpu )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
+						{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_cpu_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_cpu_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
@@ -193,7 +193,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 				all | cpu-novec )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu-novec_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build/bench-cpu-novec_qemu-arm64 \
+						{{LROS_PATH}}/.unikraft/build-cpu-novec/bench-cpu-novec_qemu-arm64 \
 						{{OUT_DIR}}/bench_lros_cpu-novec_$d.out.txt \
 						{{OUT_DIR}}/bench_lros_cpu-novec_$d.err.txt \
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
@@ -322,7 +322,7 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 
 		# LROS
 		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_lros \
-			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
+			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".errout.txt \
 			{{cpu_type}} $m
@@ -337,7 +337,7 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 		fi
 
 		just -f {{source_file()}} EVAL_ARGS="libukvmem.prefetch_size=$buf_size -- $args" run_lros \
-			{{LROS_PATH}}/.unikraft/build/bench-cpu_qemu-arm64 \
+			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".errout.txt \
 			{{cpu_type}} $m
