@@ -25,6 +25,7 @@ let # this executable enables to fit the VM shell to your terminal
     stty "$old"
     stty cols "$cols" rows "$rows"
   '';
+  outb = pkgs.callPackage ./outb.nix { inherit pkgs; };
 in
 {
   networking = {
@@ -94,6 +95,25 @@ in
   # define the Linux version in the main flake.nix
   boot.kernelPackages = kernelPackages;
 
+  boot.kernelPatches = [
+    {
+        name = "Boot time events";
+        patch = ./kernel_patches/linux_event_record.patch;
+    }
+    {
+        name = "sys.c";
+        patch = ./kernel_patches/sys.c.patch;
+    }
+    {
+        name = "syscall.tbl";
+        patch = ./kernel_patches/syscall.tbl.patch;
+    }
+    {
+        name = "syscalls.h";
+        patch = ./kernel_patches/syscalls.h.patch;
+    }
+  ];
+
   system.stateVersion = "24.05";
 
   # things to improve QoL with the guest shell
@@ -101,5 +121,17 @@ in
   environment.loginShellInit = "${resize}/bin/resize";
   systemd.services."serial-getty@ttyAMA0".enable = true;
   systemd.services."serial-getty@ttyAMA0".environment.TERM = "xterm-256color";
+
+
+  # boot time logging
+  systemd.services."boottime-log" = {
+    description = "Log boot time";
+    wantedBy = [ "multi-user.target" ];
+    # idle service is executed after all other active jobs are dispatched
+    serviceConfig.Type = "idle";
+    serviceConfig.ExecStart = "${outb}/bin/outb";
+    enable = true;
+  };
+
   services.qemuGuest.enable = true;
 }

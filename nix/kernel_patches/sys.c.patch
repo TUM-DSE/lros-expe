@@ -1,0 +1,24 @@
+diff --git a/kernel/sys.c b/kernel/sys.c
+index adc0de0..750b28f 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -159,6 +159,19 @@
+ # define PPC_SET_DEXCR_ASPECT(a, b, c)	(-EINVAL)
+ #endif
+ 
++
++SYSCALL_DEFINE1(trace_hvc, u64, id)
++{
++    register u64 x0 asm("x0") = id;
++
++    asm volatile(
++        "hvc %0"
++        :
++        : "i"(0x42), "r"(x0)
++        : "memory");
++    return 0;
++}
++
+ /*
+  * this is where the system-wide overflow UID and GID are defined, for
+  * architectures that now have 32-bit UID/GID but didn't in the past

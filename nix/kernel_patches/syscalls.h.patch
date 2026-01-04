@@ -1,0 +1,13 @@
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index e5603cc..c536a52 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -302,6 +302,8 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
+  * include the prototypes if CONFIG_ARCH_HAS_SYSCALL_WRAPPER is enabled.
+  */
+ #ifndef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
++asmlinkage long sys_trace_hvc(unsigned long id, unsigned long arg);
++
+ asmlinkage long sys_io_setup(unsigned nr_reqs, aio_context_t __user *ctx);
+ asmlinkage long sys_io_destroy(aio_context_t ctx);
+ asmlinkage long sys_io_submit(aio_context_t, long,

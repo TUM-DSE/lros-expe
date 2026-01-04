@@ -1,0 +1,9 @@
+diff --git a/scripts/syscall.tbl b/scripts/syscall.tbl
+index 580b4e2..ccb27d1 100644
+--- a/scripts/syscall.tbl
++++ b/scripts/syscall.tbl
+@@ -408,3 +408,4 @@
+ 465	common	listxattrat			sys_listxattrat
+ 466	common	removexattrat			sys_removexattrat
+ 467	common	open_tree_attr			sys_open_tree_attr
++468	common	trace_hvc			sys_trace_hvc

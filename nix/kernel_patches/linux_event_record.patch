@@ -1,0 +1,47 @@
+diff --git a/init/main.c b/init/main.c
+index e24b0780fdff..004afed949ba 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -111,6 +111,24 @@
+ 
+ #include <kunit/test.h>
+ 
++static inline void hvc_trace(uint64_t id, uint64_t arg)
++{
++    register uint64_t x0 asm("x0") = id;
++    register uint64_t x1 asm("x1") = arg;
++
++    asm volatile(
++        "hvc %0"
++        :
++        : "i"(0x42), "r"(x0), "r"(x1)
++        : "memory");
++}
++
++#define BENCHMARK_PORT 0xf4
++#define EVENT_LINUX 230
++#define EVENT_KERNEL_START (EVENT_LINUX + 0)
++#define EVENT_INIT_START   (EVENT_LINUX + 1)
++#define RECORD_EVENT(event) hvc_trace(event, BENCHMARK_PORT)
++
+ static int kernel_init(void *);
+ 
+ /*
+@@ -876,6 +894,8 @@ void start_kernel(void)
+ 	char *command_line;
+ 	char *after_dashes;
+ 
++	RECORD_EVENT(EVENT_KERNEL_START);
++
+ 	set_task_stack_end_magic(&init_task);
+ 	smp_setup_processor_id();
+ 	debug_objects_early_init();
+@@ -1463,6 +1483,8 @@ static int __ref kernel_init(void *unused)
+ 
+ 	do_sysctl_args();
+ 
++	RECORD_EVENT(EVENT_INIT_START);
++
+ 	if (ramdisk_execute_command) {
+ 		ret = run_init_process(ramdisk_execute_command);
+ 		if (!ret)
