@@ -15,56 +15,88 @@ BEGIN {
 }
 
 // QEMU entry point
-u:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:main {
+u:$1:main {
     printf("%llu: QEMU: main\n", nsecs);
 }
 
-ur:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:main {
+ur:$1:main {
     printf("%llu: QEMU: exit\n", nsecs);
     @ = 0;
 }
 
-u:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:sev_kvm_init {
+/*
+u:$1:sev_kvm_init {
     printf("%llu: QEMU: sev_kvm_init\n", nsecs);
 }
 
-ur:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:sev_kvm_init {
+ur:$1:sev_kvm_init {
     printf("%llu: QEMU: sev_kvm_init done\n", nsecs);
 }
+*/
 
-u:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:kvm_arch_init {
+u:$1:kvm_arch_init {
     printf("%llu: QEMU: kvm_arch_init\n", nsecs);
 }
 
-ur:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:kvm_arch_init {
+ur:$1:kvm_arch_init {
     printf("%llu: QEMU: kvm_arch_init done\n", nsecs);
 }
 
-u:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:memory_region_init_rom_device {
+u:$1:memory_region_init_rom_device {
     printf("%llu: QEMU: memory_region_init_rom_device\n", nsecs);
 }
 
-ur:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:memory_region_init_rom_device {
+ur:$1:memory_region_init_rom_device {
     printf("%llu: QEMU: memory_region_init_rom_device done\n", nsecs);
 }
 
-u:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:sev_snp_launch_finish {
+/*
+u:$1:sev_snp_launch_finish {
     printf("%llu: QEMU: sev_snp_launch_finish\n", nsecs);
 }
 
-ur:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:sev_snp_launch_finish {
+ur:$1:sev_snp_launch_finish {
     printf("%llu: QEMU: sev_snp_launch_finish done\n", nsecs);
 }
+*/
 
-u:../../build/qemu-amd-sev-snp/bin/.qemu-system-x86_64-wrapped:kvm_cpu_exec / @ == 0/ {
+u:$1:kvm_cpu_exec / @ == 0/ {
     @ = 1;
     printf("%llu: QEMU: kvm_cpu_exec\n", nsecs);
 }
 
-tracepoint:kvm:kvm_pio {
-    if (args->port == BENCHMARK_PORT) {
-        printf("%llu: %d %s\n", nsecs, args->val, @EVENT[args->val]);
-    }
+tracepoint:kvm:kvm_hvc_arm64 /args->imm==0x42/ {
+    printf("%llu: %d %s\n", nsecs, args->r0, @EVENT[(int64)args->r0]);
+}
+
+// KVM_SET_USER_MEMORY_REGION
+tracepoint:syscalls:sys_enter_ioctl /(args->cmd)==0x4020AE46/ {
+	/*
+	struct kvm_userspace_memory_region {
+    	__u32 slot;
+    	__u32 flags;
+    	__u64 guest_phys_addr;
+    	__u64 memory_size; // bytes
+    	__u64 userspace_addr; // start of the userspace allocated memory
+    };
+	*/
+
+	// QEMU (on ARM) uses slots 0 and 1 for simulated VIRT_FLASH, 2 for the actual RAM and 3 for the pvclock
+
+	$arr = (uint64*)args->arg;
+	$arr32 = (uint32*)args->arg;
+	$slot = $arr32[0];
+	$flags = $arr32[1];
+	$guest_paddr = $arr[1];
+	$memory_size = $arr[2];
+	$addr = $arr[3];
+
+	//Only look at actual RAM mappings
+	if ($slot == 2) {
+		printf("Memory map: %llx: %lld\n", $addr, $memory_size);
+	}
+
+	//printf("%x, %x, %lx, %lx %lx %lx %lx\n", args->fd, args->cmd, args->arg, $arr[0], $arr[1], $arr[2], $arr[3]);
 }
 
 END {
