@@ -1,0 +1,4 @@
+llama_perf_context_print:        load time =    9979.59 ms
+llama_perf_context_print: prompt eval time =       0.00 ms /    48 tokens (    0.00 ms per token,      inf tokens per second)
+llama_perf_context_print:        eval time =       0.00 ms /    16 runs   (    0.00 ms per token,      inf tokens per second)
+llama_perf_context_print:       total time =   30652.51 ms /    64 tokens
