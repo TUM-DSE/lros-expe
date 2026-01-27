@@ -1,0 +1,23 @@
+ml initializing
+ml initialized
+model loaded
+stats loaded
+info printed
+model.n_devices() = 0
+model.params.n_gpu_layers = 20
+model.hparams.n_layer = 16
+model.params.split_mode = 1
+cparams.offload_kqv = 1
+pipeline_parallel = 0
+
+main: n_kv_max = 4096, n_batch = 2048, n_ubatch = 512, flash_attn = 0, is_pp_shared = 0, n_gpu_layers = 20, n_threads = 1, n_threads_batch = 1
+
+|    PP |     TG |    B |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |      T s |    S t/s |
+|-------|--------|------|--------|----------|----------|----------|----------|----------|----------|
+|    16 |    128 |    1 |    144 |    2.256 |     7.09 |   93.369 |     1.37 |   95.625 |     1.51 |
+|    16 |    256 |    1 |    272 |    2.256 |     7.09 |  187.700 |     1.36 |  189.956 |     1.43 |
+|    32 |    128 |    1 |    160 |    4.303 |     7.44 |   93.504 |     1.37 |   97.806 |     1.64 |
+|    32 |    256 |    1 |    288 |    4.303 |     7.44 |  187.907 |     1.36 |  192.211 |     1.50 |
+
+
+
