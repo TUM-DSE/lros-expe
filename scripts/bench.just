@@ -243,7 +243,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 					{{proot}}/../lros/llama.cpp-rknn/build-novec/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 						-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
 						2> >(tee {{OUT_DIR}}/bench_process_cpu-novec_$d.err.txt >&2) \
-						| tee {{OUT_DIR}}/bench_process_cpu_$d.out.txt
+						| tee {{OUT_DIR}}/bench_process_cpu-novec_$d.out.txt
 				;;&
 				all | cuda )
 					# CUDA
