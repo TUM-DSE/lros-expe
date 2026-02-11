@@ -109,7 +109,7 @@ def main():
     data["prompt_time_cum"] = data["load_time"] + data["T_PPs"]
     data["tg_time_cum"] = data["prompt_time_cum"] + data["T_TGs"]
 
-    fig, (ax,ax1) = plt.subplots(1,2,figsize=(figwidth_full, fig_height))
+    fig, (ax,ax1) = plt.subplots(1,2,figsize=(figwidth_full_thesis, fig_height), layout="constrained")
     plot = sns.barplot(ax=ax, data=data, x="level_1", y="load_time",
                        hue="level_0"  # , style = "level_0"
                        , edgecolor="black", linewidth=0.5

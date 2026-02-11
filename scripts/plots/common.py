@@ -22,6 +22,7 @@ mpl.rcParams["font.family"] = "libertine"
 figwidth_third = 2
 figwidth_half = 3.3
 figwidth_full = 7
+figwidth_full_thesis = 5.8
 fig_height = 1.6
 FONTSIZE=7
 
@@ -29,7 +30,9 @@ palette = sns.color_palette("pastel")
 #sns.set(rc={"figure.figsize": (5, 5)})
 sns.set_style("whitegrid")
 sns.set_style("ticks", {"xtick.major.size": FONTSIZE, "ytick.major.size": FONTSIZE})
-sns.set_context("paper", rc={"font.size": FONTSIZE, "axes.titlesize": FONTSIZE, "axes.labelsize": FONTSIZE})
+sns.set_context("paper", rc={"font.size": FONTSIZE, "axes.titlesize": FONTSIZE, "axes.labelsize": FONTSIZE,
+                             "xtick.labelsize": FONTSIZE, "ytick.labelsize": FONTSIZE,
+                             "legend.fontsize": FONTSIZE, "legend.title_fontsize": FONTSIZE })
 
 def darken(color):
     hue, saturation, value = rgb_to_hsv(to_rgb(color))

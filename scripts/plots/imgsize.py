@@ -3,6 +3,7 @@
 import os.path
 
 import matplotlib
+import matplotlib.pyplot as plt
 
 from common import *
 
@@ -15,8 +16,8 @@ def main():
     data = load_data()
     #print(data)
 
-    fig, ax = plt.subplots(figsize=(figwidth_half, fig_height))
-    data_melt = data.melt(var_name="System", value_name="Img Size").head(2)
+    fig, ax = plt.subplots(figsize=(figwidth_half, 1.6))
+    data_melt = data.melt(var_name="System", value_name="Img Size").mask(lambda x: ~x['System'].isin(["LROS", "Linux"]))
     data_melt["imgMB"] = data_melt["Img Size"]/1024
     plot = sns.barplot(ax=ax, data=data_melt, y ="System", x ="imgMB", hue="System"
                         , edgecolor="black", linewidth=0.5
