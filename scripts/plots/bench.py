@@ -61,12 +61,7 @@ def get_latest_file(directory, prefix, identifier, flavor, variant, batch_size):
 def load_data() -> pd.DataFrame:
     dfs = []
     specs = {
-        "lros": [
-            # "cpu",
-            "cpu-novec",
-            # "vaccel",
-            "vaccel-novec"
-        ],
+
         "process": [
             # "cpu",
             # "cpu-novec",
@@ -76,7 +71,13 @@ def load_data() -> pd.DataFrame:
         "vm": [
             # "cpu",
             "cpu-novec"
-        ]
+        ],
+        "lros": [
+            # "cpu",
+            "cpu-novec",
+            # "vaccel",
+            "vaccel-novec"
+        ],
     }
     conv={
         "lros": {
@@ -124,7 +125,7 @@ def main():
     # TTFT
 
     # for val in data["B"].unique():
-    fig, ax = plt.subplots(figsize=(figwidth_full, fig_height))
+    fig, ax = plt.subplots(figsize=(figwidth_full_thesis, fig_height))
     plot = sns.barplot(ax=ax, data=data, x="ConfigPP", y="T_PPs",
                        hue="Spec"  # , style = "level_0"
                        , palette = palette
@@ -143,14 +144,15 @@ def main():
               # bbox_to_anchor=(0.3, 0.6),
               ncol=4,
               )
+    ax.set_ylim(0,300)
     ax.set_title(lower_better_str, fontsize=FONTSIZE, color="navy")
     # plt.suptitle(f"Batch size: {val}", fontsize=FONTSIZE)
-    plt.tight_layout()
-    plt.grid()
+    # plt.grid()
     # plt.show()
-    plt.savefig(os.path.join(plots_dir, f"bench-ttft.pdf"), format="pdf", pad_inches=0, bbox_inches="tight")
+    fig.tight_layout(pad=0.1)
+    fig.savefig(os.path.join(plots_dir, f"bench-ttft.pdf"), format="pdf")
 
-    fig, ax = plt.subplots(figsize=(figwidth_full, fig_height))
+    fig, ax = plt.subplots(figsize=(figwidth_full_thesis, fig_height))
     plot = sns.barplot(ax=ax, data=data, x="ConfigTG", y="S_TGt/s",
                        hue="Spec"  # , style = "level_0"
                        , palette = palette
@@ -167,15 +169,14 @@ def main():
     ax.set_xlabel("Batch size, Generation length (token)")
     ax.legend(loc="upper left", title=None, fontsize=FONTSIZE,
               # bbox_to_anchor=(0.3, 0.6),
-              ncol=4,
+              ncol=2,
               )
     ax.set_title(higher_better_str, fontsize=FONTSIZE, color="navy")
     # plt.suptitle(f"Batch size: {val}", fontsize=FONTSIZE)
-    plt.tight_layout()
-    plt.grid()
+    #plt.grid()
     # plt.show()
-    plt.savefig(os.path.join(plots_dir, f"bench-throughput.pdf"), format="pdf", pad_inches=0,
-                bbox_inches="tight")
+    fig.tight_layout(pad=0.1)
+    fig.savefig(os.path.join(plots_dir, f"bench-throughput.pdf"), format="pdf")
 
 
 if __name__ == "__main__":

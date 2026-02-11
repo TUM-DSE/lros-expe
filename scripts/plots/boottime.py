@@ -9,7 +9,7 @@ from common import *
 def load_data() -> pd.DataFrame:
     dfLinux = pd.read_csv(os.path.join(result_dir,"boottime", "linux.csv"))
     dfLros = pd.read_csv(os.path.join(result_dir,"boottime", "lros.csv"))
-    concat = pd.concat([dfLros, dfLinux], keys=["LROS", "Linux"], axis=0)
+    concat = pd.concat([dfLinux, dfLros], keys=["Linux", "LROS"], axis=0)
     concat=concat.sub(concat.iloc[:, 0], axis=0).div(1000*1000*1000)
     return concat.reset_index()
 
