@@ -173,8 +173,11 @@ def main():
     ax1.set_title(f"(b) {higher_better_str}", fontsize=FONTSIZE, color="navy")
 
     handles, labels = ax1.get_legend_handles_labels()
-    fig.legend(handles, labels,fontsize=FONTSIZE, loc='lower center', ncol=4, bbox_to_anchor=(0.5, -0.2))
-    fig.savefig(os.path.join(plots_dir, f"paging.pdf"), format="pdf", pad_inches=0, bbox_inches="tight")
+    fig.legend(handles, labels,fontsize=FONTSIZE, loc='outside lower center', ncol=4)
+    #fig.tight_layout()
+    fig.get_layout_engine().set(w_pad=1/72, h_pad=2/72, hspace=0,
+                                wspace=0.1)
+    fig.savefig(os.path.join(plots_dir, f"paging.pdf"), format="pdf")
 
 
 if __name__ == "__main__":
