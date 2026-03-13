@@ -161,6 +161,8 @@ If you want to use the vAccel backend there are some additional steps to run the
 -device virtio-accel-pci,id=accl0,runtime=gen0,disable-legacy=off,disable-modern=on,event_idx=off \
 ```
 
+The vAccel backend requires a mat_kernel_size.json file to be able to use it for inference. It expects this to be placed in the `/root/config` directory. You can generate one for the [Llama-3.2-1B-Instruct-f16.gguf](https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-f16.gguf) model and a given batch size using [scripts/mat_kernel_size_generator.py](scripts/mat_kernel_size_generator.py).
+
 
 ## Using LoRA adapters with the models
 
