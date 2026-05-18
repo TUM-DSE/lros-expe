@@ -67,13 +67,19 @@ build spec variant:
 				all | vaccel-novec )
 					kraft build -t bench-vaccel-novec --no-configure -o .unikraft/build-vaccel-novec
 				;;&
+				all | vacceloh )
+					kraft build -t bench-vacceloh --no-configure -o .unikraft/build-vacceloh
+				;;&
+				all | vacceloh-novec )
+					kraft build -t bench-vacceloh-novec --no-configure -o .unikraft/build-vacceloh-novec
+				;;&
 				all | cpu )
 					kraft build -t bench-cpu --no-configure -o .unikraft/build-cpu
 				;;&
 				all | cpu-novec )
 					kraft build -t bench-cpu-novec --no-configure -o .unikraft/build-cpu-novec
 				;;&
-				all | vaccel | vaccel-novec | cpu | cpu-novec)
+				all | vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec)
 				;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
@@ -181,6 +187,24 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
 					if [ $log_power = true ]; then pkill -P $!; fi
 				;;&
+				all | vacceloh )
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vacceloh_$d.power.txt & fi
+					just -f {{source_file()}} run_lros \
+						{{LROS_PATH}}/.unikraft/build-vacceloh/bench-vacceloh_qemu-arm64 \
+						{{OUT_DIR}}/bench_lros_vacceloh_$d.out.txt \
+						{{OUT_DIR}}/bench_lros_vacceloh_$d.err.txt \
+						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
+					if [ $log_power = true ]; then pkill -P $!; fi
+				;;&
+				all | vacceloh-novec )
+					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vacceloh-novec_$d.power.txt & fi
+					just -f {{source_file()}} run_lros \
+						{{LROS_PATH}}/.unikraft/build-vacceloh-novec/bench-vacceloh-novec_qemu-arm64 \
+						{{OUT_DIR}}/bench_lros_vacceloh-novec_$d.out.txt \
+						{{OUT_DIR}}/bench_lros_vacceloh-novec_$d.err.txt \
+						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
+					if [ $log_power = true ]; then pkill -P $!; fi
+				;;&
 				all | cpu )
 					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu_$d.power.txt & fi
 					just -f {{source_file()}} run_lros \
@@ -199,7 +223,7 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
 					if [ $log_power = true ]; then pkill -P $!; fi
 				;;&
-				all | vaccel | vaccel-novec | cpu | cpu-novec)
+				all | vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec)
 				;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
