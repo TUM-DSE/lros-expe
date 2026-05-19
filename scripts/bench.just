@@ -7,7 +7,7 @@ LLAMA_CPP_TARGETS := "llama-batched-bench"
 
 OUT_DIR := proot + "/../bench/out"
 
-EVAL_ARGS := "-npp 16,32 -ntg 128,256 -t 1 -ngl 20 --no-mmap --no-perf"
+EVAL_ARGS := "-npp 16,32 -ntg 1,128,256 -t 1 -ngl 20 --no-mmap --no-perf"
 EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 20 --no-mmap --no-perf"
 
 
@@ -122,7 +122,12 @@ build spec variant:
 						[ -f {{LROS_PATH}}/llama.cpp-rknn/build-rknn/CMakeCache.txt ] || cmake -B build-rknn . -DGGML_CUDA=OFF -DGGML_RKNN=ON -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 						cmake --build build-rknn -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
 					;;&
-					all | cpu | cpu-novec | cuda | rknn)
+					all | rknnoh )
+						# RKNN-OH
+						[ -f {{LROS_PATH}}/llama.cpp-rknn/build-rknnoh/CMakeCache.txt ] || cmake -B build-rknnoh . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_RKNNOH=ON -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
+						cmake --build build-rknnoh -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
+					;;&
+					all | cpu | cpu-novec | cuda | rknn | rknnoh)
 					;;
 					*)
 						echo "Unknown variant {{variant}} for spec {{spec}}" >&2
@@ -295,7 +300,20 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 						exit 1
 					fi
 				;;&
-				all | cpu | cuda | rknn)
+				all | rknnoh )
+					# RKNN
+					if [ -d /sys/devices/platform/fdab0000.npu ]; then
+						taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} \
+						{{proot}}/../lros/llama.cpp-rknn/build-rknnoh/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
+							-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+							2> >(tee {{OUT_DIR}}/bench_process_rknnoh_$d.err.txt >&2) \
+							| tee {{OUT_DIR}}/bench_process_rknnoh_$d.out.txt
+					elif [ {{lowercase(variant)}} == "rknnoh" ]; then
+						echo "Cannot execute RKNN-OH on this device. Could not find NPU." >&2
+						exit 1
+					fi
+				;;&
+				all | cpu | cuda | rknn | rknnoh)
 				;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
