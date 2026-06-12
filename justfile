@@ -105,3 +105,13 @@ build_qemu:
     else
         echo "Qemu is already built"
     fi
+
+build_llamacpp:
+    #!/usr/bin/env bash
+    if [ ! -d lros/llama.cpp-rknn/build ]; then
+        cd lros/llama.cpp-rknn
+        cmake -B build -DGGML_RKNN=ON
+        cmake --build build --config Release --target llama-batched-bench llama-server -j
+    else
+        echo "llama.cpp is already built"
+    fi

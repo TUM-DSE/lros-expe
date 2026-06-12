@@ -39,14 +39,16 @@
       };
 
       devShells = {
-        default = pkgs.mkShell {
+        default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } {
           name = "lros-devshell";
           buildInputs = with pkgs;
           [
+            gcc13
             ack
             python3
             gdb
             qemu_full
+            cmake
             just
             meson
             ninja
@@ -54,9 +56,13 @@
             pkg-config
             python312Packages.tomli
             python312Packages.pyusb
+            python312Packages.pandas
+            python312Packages.matplotlib
+            python312Packages.seaborn
             python312Packages.crc
             bc
             stress
+            ncurses
           ];
           LINUX="${pkgs.linuxPackages_latest.kernel}";
           shellHook = ''

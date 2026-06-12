@@ -63,37 +63,40 @@ def load_data() -> pd.DataFrame:
     specs = {
 
         "process": [
-            # "cpu",
+            "cpu",
             # "cpu-novec",
-            "cuda",
+            # "cuda",
             "rknn"
         ],
         "vm": [
-            # "cpu",
-            "cpu-novec"
+            "cpu",
+            # "cpu-novec"
         ],
         "lros": [
-            # "cpu",
-            "cpu-novec",
+            "cpu",
+            # "cpu-novec",
             # "vaccel",
-            "vaccel-novec"
+            # "vaccel-novec"
         ],
     }
     conv={
         "lros": {
-            "cpu-novec" : "LROS: CPU",
-            "vaccel-novec" : "LROS: vAccel"
+            "cpu"         : "LROS",
+            "cpu-novec"   : "LROS (no-vec)",
+            "vaccel-novec": "LROS: vAccel"
         },
         "process":{
+            "cpu" : "Linux process",
             "cuda": "CUDA",
             "rknn": "RKNN"
         },
         "vm":{
-            "cpu-novec": "Linux VM"
+            "cpu"      : "Linux VM",
+            "cpu-novec": "Linux VM (no-vec)"
         }
     }
     path = os.path.join(result_dir, "main")
-    batch_sizes = [1,4]
+    batch_sizes = [1]
     for spec, variants in specs.items():
         for var in variants:
             for b in batch_sizes:
@@ -119,64 +122,40 @@ def main():
     data = load_data()
     print(data)
 
-    data["ConfigPP"] = data["B"].astype(int).astype(str)+", "+data["PP"].astype(int).astype(str)
-    data["ConfigTG"] = data["B"].astype(int).astype(str)+", "+data["TG"].astype(int).astype(str)
+    data["ConfigPP"] = data["PP"].astype(int).astype(str)
+    data["ConfigTG"] = data["TG"].astype(int).astype(str)
+
+    n_hues = data["Spec"].nunique()
 
     # TTFT
-
-    # for val in data["B"].unique():
     fig, ax = plt.subplots(figsize=(figwidth_full_thesis, fig_height))
-    plot = sns.barplot(ax=ax, data=data, x="ConfigPP", y="T_PPs",
-                       hue="Spec"  # , style = "level_0"
-                       , palette = palette
-                       , edgecolor="black", linewidth=0.5
-                       #  hue_order = get_order('vmcache')
-                       # marker="H"
-                       )
-    plot.set_yscale("log")
-    # plot.set_xticks([0, 100, 200, 300])
-    # plot.set_xticklabels([0, 100, 200, 300], fontsize=FONTSIZE)
-    # plot.set_yticks([0, 50_000, 100_000])
-    # plot.set_yticklabels([0, 50, 100], fontsize=FONTSIZE)
+    sns.barplot(ax=ax, data=data, x="ConfigPP", y="T_PPs",
+                hue="Spec", palette=palette,
+                edgecolor="black", linewidth=0.5)
     ax.set_ylabel("TTFT (s)")
-    ax.set_xlabel("Batch size, Prompt length (token)")
-    ax.legend(loc="upper left", title=None, fontsize=FONTSIZE,
-              # bbox_to_anchor=(0.3, 0.6),
-              ncol=4,
-              )
-    ax.set_ylim(0,300)
-    ax.set_title(lower_better_str, fontsize=FONTSIZE, color="navy")
-    # plt.suptitle(f"Batch size: {val}", fontsize=FONTSIZE)
-    # plt.grid()
-    # plt.show()
-    fig.tight_layout(pad=0.1)
-    fig.savefig(os.path.join(plots_dir, f"bench-ttft.pdf"), format="pdf")
+    ax.set_xlabel("Prompt length (token)")
+    ax.set_ylim(bottom=0)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0),
+              ncol=n_hues, title=None, fontsize=FONTSIZE, frameon=False)
+    ax.annotate(lower_better_str, xy=(1, 1), xycoords="axes fraction",
+                ha="right", va="bottom", fontsize=FONTSIZE - 1, style="italic")
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_dir, f"bench-ttft.pdf"), format="pdf", bbox_inches="tight")
 
+    # Throughput
     fig, ax = plt.subplots(figsize=(figwidth_full_thesis, fig_height))
-    plot = sns.barplot(ax=ax, data=data, x="ConfigTG", y="S_TGt/s",
-                       hue="Spec"  # , style = "level_0"
-                       , palette = palette
-                       , edgecolor="black", linewidth=0.5
-                       #  hue_order = get_order('vmcache')
-                       # marker="H"
-                       )
-    plot.set_yscale("log")
-    # plot.set_xticks([0, 100, 200, 300])
-    # plot.set_xticklabels([0, 100, 200, 300], fontsize=FONTSIZE)
-    # plot.set_yticks([0, 50_000, 100_000])
-    # plot.set_yticklabels([0, 50, 100], fontsize=FONTSIZE)
+    sns.barplot(ax=ax, data=data, x="ConfigTG", y="S_TGt/s",
+                hue="Spec", palette=palette,
+                edgecolor="black", linewidth=0.5)
     ax.set_ylabel("Throughput (token/s)")
-    ax.set_xlabel("Batch size, Generation length (token)")
-    ax.legend(loc="upper left", title=None, fontsize=FONTSIZE,
-              # bbox_to_anchor=(0.3, 0.6),
-              ncol=2,
-              )
-    ax.set_title(higher_better_str, fontsize=FONTSIZE, color="navy")
-    # plt.suptitle(f"Batch size: {val}", fontsize=FONTSIZE)
-    #plt.grid()
-    # plt.show()
-    fig.tight_layout(pad=0.1)
-    fig.savefig(os.path.join(plots_dir, f"bench-throughput.pdf"), format="pdf")
+    ax.set_xlabel("Generation length (token)")
+    ax.set_ylim(bottom=0)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0),
+              ncol=n_hues, title=None, fontsize=FONTSIZE, frameon=False)
+    ax.annotate(higher_better_str, xy=(1, 1), xycoords="axes fraction",
+                ha="right", va="bottom", fontsize=FONTSIZE - 1, style="italic")
+    fig.tight_layout()
+    fig.savefig(os.path.join(plots_dir, f"bench-throughput.pdf"), format="pdf", bbox_inches="tight")
 
 
 if __name__ == "__main__":

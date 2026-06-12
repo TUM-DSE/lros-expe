@@ -6,9 +6,10 @@ LROS_PATH := proot + "/../lros/"
 LLAMA_CPP_TARGETS := "llama-batched-bench"
 
 OUT_DIR := proot + "/../bench/out"
+parallel_img := LROS_PATH + "/.unikraft/build-parallel/parallel_qemu-arm64"
 
-EVAL_ARGS := "-npp 16,32 -ntg 1,128,256 -t 1 -ngl 20 --no-mmap --no-perf"
-EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 20 --no-mmap --no-perf"
+EVAL_ARGS := "-npp 16,32 -ntg 1,128,256 -t 1 -ngl 0 --no-mmap --no-perf"
+EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 0 --no-mmap --no-perf"
 
 
 run_vm out out_err variant="build" size_mem="16G" cpu_type="big" additional_vm_args="":
@@ -16,7 +17,7 @@ run_vm out out_err variant="build" size_mem="16G" cpu_type="big" additional_vm_a
 
 	set -e
 
-	just vm 1 {{size_mem}} {{cpu_type}} '{{additional_vm_args}}' > /dev/null 2> /dev/null &
+	just vm 1 {{size_mem}} {{cpu_type}} '{{additional_vm_args}}' 2>&1 > tmp_out.txt &
 
 	sleep 40
 
@@ -40,17 +41,57 @@ run_lros img out out_err cpu_type="big" size_mem="16G" batch_size="1":
 		-parallel none \
 		-device virtio-9p-pci,fsdev=rootfs,mount_tag=rootfs \
 		-fsdev local,id=rootfs,path={{proot}}/..,security_model=mapped-xattr \
-		-object acceldev-backend-vaccel,id=gen0 \
-		-device virtio-accel-pci,id=accl0,runtime=gen0,disable-legacy=off,disable-modern=on,event_idx=off \
+		-nic none \
 		-display none \
 		-nographic \
 		-vga none \
 		-no-reboot \
 		-rtc base=utc \
 		-enable-kvm \
-	> {{out}} \
-	2> {{out_err}}
+		> {{out}} \
+		2> {{out_err}}
+	#-object acceldev-backend-vaccel,id=gen0 \
+	#-device virtio-accel-pci,id=accl0,runtime=gen0,disable-legacy=off,disable-modern=on,event_idx=off \
+	#\
 
+run_lros_stdout img size_mem="16G" args="":
+	@taskset -c 4-4 qemu-system-aarch64 \
+		-kernel {{img}} \
+		-append "{{args}}" \
+		-cpu host \
+		-machine virt \
+		-m size={{size_mem}} \
+		-smp cpus=1,threads=1,sockets=1 \
+		-parallel none \
+		-device virtio-9p-pci,fsdev=rootfs,mount_tag=rootfs \
+		-fsdev local,id=rootfs,path={{proot}}/..,security_model=mapped-xattr \
+		-nic none \
+		-display none \
+		-nographic \
+		-vga none \
+		-no-reboot \
+		-rtc base=utc \
+		-enable-kvm
+	
+
+run_parallel cpu_type="big" size_mem="16G" batch_size="1":
+	taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} qemu-system-aarch64 \
+		-kernel {{parallel_img}} \
+		-append "llama-parallel -np 2 -ns 6 --arrival-interval-ms 10000 -n 20 -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
+		-cpu host \
+		-machine virt \
+		-m size={{size_mem}} \
+		-smp cpus=1,threads=1,sockets=1 \
+		-parallel none \
+		-device virtio-9p-pci,fsdev=rootfs,mount_tag=rootfs \
+		-fsdev local,id=rootfs,path={{proot}}/..,security_model=mapped-xattr \
+		-nic none \
+		-display none \
+		-nographic \
+		-vga none \
+		-no-reboot \
+		-rtc base=utc \
+		-enable-kvm
 
 build spec variant:
 	#!/usr/bin/env bash
@@ -79,7 +120,10 @@ build spec variant:
 				all | cpu-novec )
 					kraft build -t bench-cpu-novec --no-configure -o .unikraft/build-cpu-novec
 				;;&
-				all | vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec)
+				all | parallel )
+					kraft build -t parallel --no-configure -o .unikraft/build-parallel
+				;;&
+				all | vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec | parallel )
 				;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
@@ -94,7 +138,7 @@ build spec variant:
 				case {{lowercase(variant)}} in
 					all | cpu )
 						# CPU-only
-						[ -f {{LROS_PATH}}/llama.cpp-rknn/build/CMakeCache.txt ] || cmake -B build . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
+						[ -f {{LROS_PATH}}/llama.cpp-rknn/build/CMakeCache.txt ] || cmake -B build . -DGGML_CUDA=OFF -DGGML_RKNN=OFF -DGGML_VACCEL=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16
 						cmake --build build -t {{LLAMA_CPP_TARGETS}} -- -j $(nproc)
 					;;&
 					all | cpu-novec )
@@ -141,7 +185,7 @@ build spec variant:
 		;;
 	esac
 
-bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch_size="1": (build spec variant)
+bench spec variant="all" model="Llama-3.2-1B-Instruct-f16.gguf" cpu_type="big" size_mem="10G" log_power="false" batch_size="1": #(build spec variant)
 	#!/usr/bin/env bash
 
 	set -ex
@@ -166,6 +210,8 @@ bench spec variant="all" cpu_type="big" size_mem="16G" $log_power="false" $batch
 	fi
 
 	d="$batch_size-$(date -Iseconds)"
+	log_power={{log_power}}
+	batch_size={{batch_size}}
 
 	case {{lowercase(spec)}} in
 		lros)
@@ -341,42 +387,42 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 		2> >(tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).out.txt
 
-paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
+paging cpu_type="big": #(build "linux" "cpu") (build "lros" "cpu")
 	#!/usr/bin/env bash
 
-	set -ex
+	set -euo pipefail
 
 	mkdir -p {{OUT_DIR}}/paging
-
-	d=$(date -Iseconds)
 
 	# Shared arguments (16 prompt token, 8 text gen token, 1 batch, 1 thread, no detailed integrated timings)
 	args="-npp 16 -ntg 8 -npl 1 -t 1 --no-perf"
 
+	if [ "{{cpu_type}}" = "big" ]; then affinity="4-4"; else affinity="0-0"; fi
+
 	for m in "16G" "2G"; do
-		# Linux VM
-		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_vm \
-			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".out.txt \
-			 {{OUT_DIR}}/paging/bench_paging_"$m"_read_"$d".err.txt \
-			 build $m {{cpu_type}}
-		just -f {{source_file()}} EVAL_ARGS="$args --no-prefetch" run_vm \
-			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".out.txt \
-			 {{OUT_DIR}}/paging/bench_paging_"$m"_mmap_"$d".err.txt \
-			 build $m {{cpu_type}}
-		just -f {{source_file()}} EVAL_ARGS="$args --no-perf" run_vm \
-			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".out.txt \
-			 {{OUT_DIR}}/paging/bench_paging_"$m"_prefetch_"$d".err.txt \
-			 build $m {{cpu_type}}
+		# Linux process (host) — cgroup MemoryMax=$m matches the VM memory size
+		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
+			taskset -c "$affinity" \
+			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench $args --no-mmap \
+			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_read.out.txt \
+			2> {{OUT_DIR}}/paging/bench_paging_"$m"_read.err.txt
+		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
+			taskset -c "$affinity" \
+			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench $args \
+			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_mmap.out.txt \
+			2> {{OUT_DIR}}/paging/bench_paging_"$m"_mmap.err.txt
 
 		# LROS
 		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".errout.txt \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.out.txt \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.errout.txt \
 			{{cpu_type}} $m
 		# Fix merged output
-		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".out.txt \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread_"$d".err.txt || test $? = 1;
+		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.out.txt \
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.err.txt || test $? = 1;
 
 		if [[ "$m" == "16G" ]]; then
 			buf_size=4096
@@ -386,62 +432,274 @@ paging cpu_type="big": (build "linux" "cpu") (build "lros" "cpu")
 
 		just -f {{source_file()}} EVAL_ARGS="libukvmem.prefetch_size=$buf_size -- $args" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".errout.txt \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.out.txt \
+			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.errout.txt \
 			{{cpu_type}} $m
 		# Fix merged output
-		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".out.txt \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch_"$d".err.txt || test $? = 1;
+		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.out.txt \
+			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.err.txt || test $? = 1;
 	done
 
+paging_motiv:
+	#!/usr/bin/env bash
+
+	set -euo pipefail
+	
+	to_csv() {
+		awk -F'|' -v mem="$1" -v backend="$2" '
+			/^\|[[:space:]]*[0-9]/ {
+				gsub(/[[:space:]]/, "", $6); gsub(/[[:space:]]/, "", $7)
+				gsub(/[[:space:]]/, "", $8); gsub(/[[:space:]]/, "", $9)
+				gsub(/[[:space:]]/, "", $10); gsub(/[[:space:]]/, "", $11)
+				print mem "," backend "," $6 "," $7 "," $8 "," $9 "," $10 "," $11
+			}'
+	}
+
+	run_bench() {
+		local mem="$1" backend="$2"; shift 2
+		local out ec=0
+		out=$(systemd-run --user --scope -p MemoryMax="$mem" -p MemorySwapMax=0 --quiet -- \
+			taskset -c 4 "$@" 2>/dev/null) || ec=$?
+		if [ "$ec" -eq 0 ]; then
+			echo "$out" | to_csv "$mem" "$backend"
+		else
+			echo "$mem,$backend,0,0,0,0,0,0"
+		fi
+	}
+
+	echo "mem_limit,backend,t_pp_s,s_pp_t_s,t_tg_s,s_tg_t_s,t_s,s_t_s"
+
+	for m in "4096M" "3072M" "2816M" "2560M" "2048M"; do
+		sudo bash -c "echo 1 > /proc/sys/vm/drop_caches"
+		run_bench "$m" "mmap" \
+			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench \
+			-npp 16 -ntg 32 -npl 1 -t 1 --no-perf \
+			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf
+		sudo bash -c "echo 1 > /proc/sys/vm/drop_caches"
+		run_bench "$m" "read" \
+			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench \
+			-npp 16 -ntg 32 -npl 1 -t 1 --no-mmap --no-perf \
+			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf
+	done
+	just -f {{source_file()}} run_lros_stdout {{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 2048 "llama-batched-bench libukvmem.prefetch_size=64 -- -npp 16 -ntg 32 -npl 1 -t 1 --no-perf -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" | to_csv "2048" "lros"
+
 perf_isolation: (build "linux" "cpu")
-  #!/usr/bin/env bash
-  set -ex
-  mkdir -p {{OUT_DIR}}/perf_isolation
-  echo "setup,type_interference,nb_thread_interference,time" > {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-  type_interference="cpu vm io"
+	#!/usr/bin/env bash
+
+	set -euo pipefail
+	mkdir -p {{OUT_DIR}}/perf_isolation
+	echo "setup,type_interference,nb_thread_interference,time" > {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+	type_interference="cpu vm io"
 
 
-  just vm 1 4G big > /dev/null 2> /dev/null &
-  sleep 40
-  
-  echo -n "vm,none,0," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-  sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
-  just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-  
-  for ti in $type_interference
-  do 
-    echo -n "vm,$ti,7," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
-    taskset -c 0-3,5-7 stress --$ti 7 > /dev/null 2> /dev/null &
-    just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo kill -9 $(pidof stress)
-    
-    echo -n "vm,$ti,8," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
-    taskset -c 0-7 stress --$ti 8 > /dev/null 2> /dev/null &
-    just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo kill -9 $(pidof stress)
-  done
+	just vm 1 4G big > /dev/null 2> /dev/null &
+	sleep 40
 
-  just ssh_local "poweroff"
-  sleep 40
+	echo -n "vm,none,0," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+	sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+	just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
 
-  echo -n "process,none,0," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-  sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
-  taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+	for ti in $type_interference
+	do 
+		echo -n "vm,$ti,7," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+		taskset -c 0-3,5-7 stress --$ti 7 > /dev/null 2> /dev/null &
+		just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo kill -9 $(pidof stress)
 
-  for ti in $type_interference
-  do    
-    echo -n "process,$ti,7," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
-    taskset -c 0-3,5-7 stress --$ti 7 > /dev/null 2> /dev/null &
-    taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo kill -9 $(pidof stress)
-    
-    echo -n "process,$ti,8," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
-    taskset -c 0-7 stress --$ti 8 > /dev/null 2> /dev/null &
-    taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
-    sudo kill -9 $(pidof stress)
-  done
+		echo -n "vm,$ti,8," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+		taskset -c 0-7 stress --$ti 8 > /dev/null 2> /dev/null &
+		just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo kill -9 $(pidof stress)
+	done
+
+	just ssh_local "poweroff"
+	sleep 40
+
+	echo -n "process,none,0," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+	sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+	taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+
+	for ti in $type_interference
+	do    
+		echo -n "process,$ti,7," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+		taskset -c 0-3,5-7 stress --$ti 7 > /dev/null 2> /dev/null &
+		taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo kill -9 $(pidof stress)
+
+		echo -n "process,$ti,8," >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo sh -c "echo 1 > /proc/sys/vm/drop_caches"
+		taskset -c 0-7 stress --$ti 8 > /dev/null 2> /dev/null &
+		taskset -c 4 {{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf 2>&1 | grep "total time" | awk '{print $5}' >> {{OUT_DIR}}/perf_isolation/perf_isolation.csv
+		sudo kill -9 $(pidof stress)
+	done
+
+# ─── Parallel sweep (iii): avg. throughput vs. #apps ────────────────────────
+#
+# Sweeps n_parallel from 1 to n_parallel_max.  All n_parallel requests arrive
+# at t=0 (ns=np so no staggered arrivals, no preemption) giving a clean N-way
+# parallel execution for each data point.  Per-request throughput is extracted
+# from DONE lines and written to a CSV for plotting.
+#
+# KV cache for Llama-3.2-1B-Instruct-f16 (n_layer=16, n_head_kv=8, head_dim=64, f16):
+#   32 KB per token  →  n_ctx = (2·N+1)·tokens_per_seq  →  sized per run below.
+#
+# Run:   just -f scripts/bench.just bench_parallel_sweep
+# Sweeps n_parallel=1..n_parallel_max, repeated n_runs times per point.
+# Each run exercises ns=np requests so all slots are active, then captures
+# per-request throughput and latency (from DONE lines) and memory allocations
+# (from llama.cpp's init output) into a single CSV.
+#
+# CSV columns: n_parallel, n_ctx, run_id, seq_id, latency_s, speed_t_per_s,
+#              model_mib, kv_mib, compute_mib, output_mib
+#   — memory columns are constant for all rows sharing the same n_parallel
+#
+# Plot throughput:  just -f scripts/bench.just plot_parallel_sweep <csv>
+# Plot latency:     just -f scripts/bench.just plot_latency_sweep <csv>
+# Plot KV memory:   just -f scripts/bench.just plot_kv_memory <csv>
+bench_parallel_sweep n_parallel_max="12" n_predict="20" n_runs="5" tokens_per_seq="512" cpu_type="big" size_mem="8G":
+    #!/usr/bin/env bash
+    set -e
+    mkdir -p {{OUT_DIR}}/parallel_sweep
+    out_csv="{{OUT_DIR}}/parallel_sweep/sweep.csv"
+    echo "n_parallel,n_ctx,run_id,seq_id,latency_s,speed_t_per_s,model_mib,kv_mib,compute_mib,output_mib" > "$out_csv"
+
+    for np in $(seq 1 {{n_parallel_max}}); do
+        n_ctx=$(( (2 * np + 1) * {{tokens_per_seq}} ))
+        append_args="llama-parallel -m /root/models/Llama-3.2-1B-Instruct-f16.gguf -np $np -ns $np -n {{n_predict}} -c $n_ctx -t 1 -ngl 0"
+
+        for run_id in $(seq 1 {{n_runs}}); do
+            log="{{OUT_DIR}}/parallel_sweep/run_np${np}_run${run_id}.log"
+            echo "=== n_parallel=$np run=$run_id/${{n_runs}} (n_ctx=$n_ctx) ===" | tee "$log"
+            taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} qemu-system-aarch64 \
+                -kernel {{parallel_img}} \
+                -append "$append_args" \
+                -cpu host \
+                -machine virt \
+                -m size={{size_mem}} \
+                -smp cpus=1,threads=1,sockets=1 \
+                -parallel none \
+                -device virtio-9p-pci,fsdev=rootfs,mount_tag=rootfs \
+                -fsdev local,id=rootfs,path={{proot}}/..,security_model=mapped-xattr \
+                -nic none \
+                -display none \
+                -nographic \
+                -vga none \
+                -no-reboot \
+                -rtc base=utc \
+                -enable-kvm \
+                2>&1 | tee -a "$log"
+
+            model_mib=$(grep -oP 'model buffer size\s*=\s*\K[\d.]+' "$log" | head -1)
+            kv_mib=$(grep -oP 'KV self size\s*=\s*\K[\d.]+' "$log" | head -1)
+            compute_mib=$(grep -oP 'compute buffer size\s*=\s*\K[\d.]+' "$log" | head -1)
+            output_mib=$(grep -oP 'output buffer size\s*=\s*\K[\d.]+' "$log" | head -1)
+
+            if [ -z "$kv_mib" ]; then
+                echo "WARNING: could not parse memory lines for np=$np run=$run_id" >&2
+            fi
+
+            # One row per completed request; memory columns are constant for this np
+            grep ": DONE" "$log" | while IFS= read -r line; do
+                seq_id=$(echo "$line" | grep -oP 'seq\s+\K\d+(?=/)')
+                latency=$(echo "$line" | grep -oP 'total\s+\K[\d.]+(?=\s+s)')
+                speed=$(echo "$line" | grep -oP 'speed\s+\K[\d.]+')
+                if [ -n "$seq_id" ] && [ -n "$speed" ]; then
+                    echo "$np,$n_ctx,$run_id,$seq_id,${latency:-0},$speed,${model_mib:-0},${kv_mib:-0},${compute_mib:-0},${output_mib:-0}" >> "$out_csv"
+                fi
+            done
+        done
+    done
+
+    echo "Sweep complete. Results: $out_csv"
+
+plot_parallel_sweep csv out="":
+    #!/usr/bin/env bash
+    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
+    out="{{out}}"
+    [ -z "$out" ] && out="${csv_path%.csv}_throughput.pdf"
+    cd {{source_directory()}}/plots
+    python3 parallel_sweep.py "$csv_path" "$out"
+
+plot_latency_sweep csv out="":
+    #!/usr/bin/env bash
+    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
+    out="{{out}}"
+    [ -z "$out" ] && out="${csv_path%.csv}_latency.pdf"
+    cd {{source_directory()}}/plots
+    python3 latency_sweep.py "$csv_path" "$out"
+
+plot_kv_memory csv out="":
+    #!/usr/bin/env bash
+    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
+    out="{{out}}"
+    [ -z "$out" ] && out="${csv_path%.csv}_kv_memory.pdf"
+    cd {{source_directory()}}/plots
+    python3 kv_memory.py "$csv_path" "$out"
+
+# ─── Context-switch latency (i) ──────────────────────────────────────────────
+#
+# Runs the parallel benchmark with np=2 slots, ns=8 requests staggered every
+# arrival_interval_ms ms with cycling priorities 0→1→2, which guarantees
+# several preemptions and resumes alongside the normal completions.
+#
+# Each KV-cache switch emits a line:
+#   [t=  X.XX s] CTX_SWITCH type=<complete|preempt|resume>  n_tokens=NNN elapsed_us=NNN
+#
+# The recipe captures those lines into a CSV for plot_ctx_switch.
+# Run:   just -f scripts/bench.just bench_ctx_switch
+# Plot:  just -f scripts/bench.just plot_ctx_switch <csv>
+bench_ctx_switch n_parallel="2" n_seq="8" n_predict="20" arrival_interval_ms="8000" cpu_type="big" size_mem="8G":
+    #!/usr/bin/env bash
+    set -e
+    mkdir -p {{OUT_DIR}}/ctx_switch
+    log="{{OUT_DIR}}/ctx_switch/run.log"
+    out_csv="{{OUT_DIR}}/ctx_switch/ctx_switch.csv"
+
+    # Context sized for (2·np+1) × 512 tokens (enough for 20-token requests)
+    n_ctx=$(( (2 * {{n_parallel}} + 1) * 512 ))
+    append_args="llama-parallel -m /root/models/Llama-3.2-1B-Instruct-f16.gguf -np {{n_parallel}} -ns {{n_seq}} -n {{n_predict}} -c $n_ctx -t 1 -ngl 0 --arrival-interval-ms {{arrival_interval_ms}}"
+
+    taskset -c {{ if cpu_type == "big" { "4-4" } else { "0-0" } }} qemu-system-aarch64 \
+        -kernel {{parallel_img}} \
+        -append "$append_args" \
+        -cpu host \
+        -machine virt \
+        -m size={{size_mem}} \
+        -smp cpus=1,threads=1,sockets=1 \
+        -parallel none \
+        -device virtio-9p-pci,fsdev=rootfs,mount_tag=rootfs \
+        -fsdev local,id=rootfs,path={{proot}}/..,security_model=mapped-xattr \
+        -nic none \
+        -display none \
+        -nographic \
+        -vga none \
+        -no-reboot \
+        -rtc base=utc \
+        -enable-kvm \
+        2>&1 | tee "$log"
+
+    echo "type,n_tokens,elapsed_us" > "$out_csv"
+    while IFS= read -r line; do
+        sw_type=$(echo "$line" | grep -oP 'type=\K\S+'       || true)
+        n_tok=$(echo "$line"   | grep -oP 'n_tokens=\s*\K\d+' || true)
+        elapsed=$(echo "$line" | grep -oP 'elapsed_us=\K\d+'  || true)
+        if [ -n "$sw_type" ] && [ -n "$n_tok" ] && [ -n "$elapsed" ]; then
+            echo "$sw_type,$n_tok,$elapsed" >> "$out_csv"
+        fi
+    done < <(grep "CTX_SWITCH" "$log" || true)
+
+    echo "Done. CSV: $out_csv"
+
+# Plot context-switch latency as a grouped bar chart (complete / preempt / resume).
+plot_ctx_switch csv out="":
+    #!/usr/bin/env bash
+    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
+    out="{{out}}"
+    [ -z "$out" ] && out="${csv_path%.csv}.pdf"
+    cd {{source_directory()}}/plots
+    python3 ctx_switch.py "$csv_path" "$out"
+
+# just -f scripts/bench.just plot_parallel_sweep bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_latency_sweep bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_kv_memory bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_ctx_switch bench/out/ctx_switch/ctx_switch.csv

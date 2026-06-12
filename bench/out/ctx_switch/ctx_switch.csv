@@ -1,0 +1,13 @@
+type,n_tokens,elapsed_us
+complete,282,186
+complete,279,188
+complete,279,185
+preempt,274,326
+preempt,278,416
+complete,279,238
+resume,278,360
+complete,279,223
+resume,274,373
+complete,279,200
+complete,279,198
+complete,279,200

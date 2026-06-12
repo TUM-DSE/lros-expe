@@ -36,11 +36,11 @@ CFLAGS=-Wno-error PKG_CONFIG_PATH=/home/$(whoami)/lros-expe/vaccel/build/out/usr
 make -j
 ```
 
-3. llama.cpp
+3. lros/llama.cpp-rknn
 
 ```bash
-cmake -B build
-cmake --build build --config Release -j
+cmake -B build -DGGML_RKNN=ON
+cmake --build build --config Release --target llama-batched-bench -j
 ```
 
 ### Unikernel

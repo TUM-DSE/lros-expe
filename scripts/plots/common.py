@@ -23,7 +23,7 @@ figwidth_third = 2
 figwidth_half = 3.3
 figwidth_full = 7
 figwidth_full_thesis = 5.8
-fig_height = 1.6
+fig_height = 2
 FONTSIZE=7
 
 palette = sns.color_palette("pastel")
