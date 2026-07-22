@@ -1,18 +1,15 @@
-import? "../justfile"
-import "build.just"
 import "run.just"
-import "plot.just"
 
 LROS_IMAGE_NAME := "llama.cpp_qemu-arm64"
-LROS_PATH := proot + "/../lros/"
+LROS_PATH := proot + "/lros/"
 
 LLAMA_CPP_TARGETS := "llama-batched-bench"
 
-OUT_DIR := proot + "/../bench/out"
+OUT_DIR := proot + "/bench/out"
 parallel_img := LROS_PATH + "/.unikraft/build-parallel/parallel_qemu-arm64"
 
-MODEL := proot + "/../models/Llama-3.2-1B-Instruct-f16.gguf"
-LLAMACPP_BIN := proot + "/../lros/llama.cpp-rknn/build/bin/llama-batched-bench"
+MODEL := proot + "/models/Llama-3.2-1B-Instruct-f16.gguf"
+LLAMACPP_BIN := proot + "/lros/llama.cpp-rknn/build/bin/llama-batched-bench"
 
 EVAL_ARGS := "-npp 16,32 -ntg 1,128,256 -t 1 -ngl 0 --no-mmap --no-perf"
 EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 0 --no-mmap --no-perf"
@@ -41,7 +38,7 @@ bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size
 		powerlogger="measure_jetson 0.1"
 	fi
 
-	if [ ! -f {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf ]; then
+	if [ ! -f {{proot}}/models/Llama-3.2-1B-Instruct-f16.gguf ]; then
 		echo "Please download the Llama-3.2-1B-Instruct-f16.gguf model." >&2
 		exit 1
 	fi
@@ -52,10 +49,10 @@ bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size
 
 	case {{lowercase(spec)}} in
 		lros)
-			if [ ! -f {{proot}}/../config/mat_kernel_size_$batch_size.json ]; then
-				{{proot}}/mat_kernel_size_generator.py {{proot}}/../config/mat_kernel_size_$batch_size.json -b $batch_size
+			if [ ! -f {{proot}}/config/mat_kernel_size_$batch_size.json ]; then
+				{{proot}}/scripts/mat_kernel_size_generator.py {{proot}}/config/mat_kernel_size_$batch_size.json -b $batch_size
 			fi
-			cp -fl {{proot}}/../config/mat_kernel_size_$batch_size.json {{proot}}/../config/mat_kernel_size.json
+			cp -fl {{proot}}/config/mat_kernel_size_$batch_size.json {{proot}}/config/mat_kernel_size.json
 			case {{lowercase(variant)}} in
 				vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec )
 					variants={{lowercase(variant)}} ;;
@@ -68,7 +65,7 @@ bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size
 
 			for v in $variants; do
 				if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_${v}_$d.power.txt & fi
-				just -f {{source_file()}} run_lros \
+				just -f {{justfile()}} run_lros \
 					{{LROS_PATH}}/.unikraft/build-${v}/bench-${v}_qemu-arm64 \
 					{{OUT_DIR}}/bench_lros_${v}_$d.out.txt \
 					{{OUT_DIR}}/bench_lros_${v}_$d.err.txt \
@@ -89,7 +86,7 @@ bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size
 			esac
 
 			for v in $variants; do
-				just -f {{source_file()}} EVAL_ARGS="{{EVAL_ARGS}} -npl {{batch_size}}" run_vm \
+				just -f {{justfile()}} EVAL_ARGS="{{EVAL_ARGS}} -npl {{batch_size}}" run_vm \
 					{{OUT_DIR}}/bench_vm_${v}_$d.out.txt \
 					{{OUT_DIR}}/bench_vm_${v}_$d.err.txt \
 					build-${v} {{size_mem}}
@@ -129,7 +126,7 @@ bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size
 				esac
 
 				taskset -c {{AFFINITY}} \
-				{{proot}}/../lros/llama.cpp-rknn/build-${v}/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
+				{{proot}}/lros/llama.cpp-rknn/build-${v}/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 					-m {{model}} \
 					2> >(tee {{OUT_DIR}}/bench_process_${v}_$d.err.txt >&2) \
 					| tee {{OUT_DIR}}/bench_process_${v}_$d.out.txt
@@ -154,7 +151,7 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 
 	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
 		-o {{OUT_DIR}}/thp/perf_thp_$d.json \
-		{{proot}}/../lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{MODEL}} \
+		{{proot}}/lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{MODEL}} \
 		2> >(tee {{OUT_DIR}}/thp/bench_thp_$d.err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_thp_$d.out.txt
 
@@ -184,7 +181,7 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 			2> {{OUT_DIR}}/paging/bench_paging_"$m"_mmap.err.txt
 
 		# LROS
-		just -f {{source_file()}} EVAL_ARGS="$args --no-mmap" run_lros \
+		just -f {{justfile()}} EVAL_ARGS="$args --no-mmap" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.errout.txt \
@@ -199,7 +196,7 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 			buf_size=64
 		fi
 
-		just -f {{source_file()}} EVAL_ARGS="libukvmem.prefetch_size=$buf_size -- $args" run_lros \
+		just -f {{justfile()}} EVAL_ARGS="libukvmem.prefetch_size=$buf_size -- $args" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.out.txt \
 			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.errout.txt \
@@ -250,7 +247,7 @@ paging_motiv:
 			-npp 16 -ntg 32 -npl 1 -t 1 --no-mmap --no-perf \
 			-m {{MODEL}}
 	done
-	just -f {{source_file()}} run_lros_stdout {{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 2048 "llama-batched-bench libukvmem.prefetch_size=64 -- -npp 16 -ntg 32 -npl 1 -t 1 --no-perf -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" | to_csv "2048" "lros"
+	just -f {{justfile()}} run_lros_stdout {{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 2048 "llama-batched-bench libukvmem.prefetch_size=64 -- -npp 16 -ntg 32 -npl 1 -t 1 --no-perf -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" | to_csv "2048" "lros"
 
 perf_isolation: (build "linux" "cpu")
 	#!/usr/bin/env bash
@@ -311,7 +308,7 @@ perf_isolation: (build "linux" "cpu")
 # KV cache for Llama-3.2-1B-Instruct-f16 (n_layer=16, n_head_kv=8, head_dim=64, f16):
 #   32 KB per token  →  n_ctx = (2·N+1)·tokens_per_seq  →  sized per run below.
 #
-# Run:   just -f scripts/bench.just bench_parallel_sweep
+# Run:   just bench_parallel_sweep
 # Sweeps n_parallel=1..n_parallel_max, repeated n_runs times per point.
 # Each run exercises ns=np requests so all slots are active, then captures
 # per-request throughput and latency (from DONE lines) and memory allocations
@@ -321,9 +318,9 @@ perf_isolation: (build "linux" "cpu")
 #			  model_mib, kv_mib, compute_mib, output_mib
 #   — memory columns are constant for all rows sharing the same n_parallel
 #
-# Plot throughput:  just -f scripts/bench.just plot_parallel_sweep <csv>
-# Plot latency:	 just -f scripts/bench.just plot_latency_sweep <csv>
-# Plot KV memory:   just -f scripts/bench.just plot_kv_memory <csv>
+# Plot throughput:  just plot_parallel_sweep <csv>
+# Plot latency:	 just plot_latency_sweep <csv>
+# Plot KV memory:   just plot_kv_memory <csv>
 bench_parallel_sweep n_parallel_max="12" n_predict="20" n_runs="5" tokens_per_seq="512" size_mem="8G":
 	#!/usr/bin/env bash
 	set -e
@@ -338,7 +335,7 @@ bench_parallel_sweep n_parallel_max="12" n_predict="20" n_runs="5" tokens_per_se
 		for run_id in $(seq 1 {{n_runs}}); do
 			log="{{OUT_DIR}}/parallel_sweep/run_np${np}_run${run_id}.log"
 			echo "=== n_parallel=$np run=$run_id/${{n_runs}} (n_ctx=$n_ctx) ===" | tee "$log"
-			just -f {{source_file()}} _qemu {{parallel_img}} "$append_args" {{size_mem}} \
+			just -f {{justfile()}} _qemu {{parallel_img}} "$append_args" {{size_mem}} \
 				2>&1 | tee -a "$log"
 
 			model_mib=$(grep -oP 'model buffer size\s*=\s*\K[\d.]+' "$log" | head -1)
@@ -375,8 +372,8 @@ bench_parallel_sweep n_parallel_max="12" n_predict="20" n_runs="5" tokens_per_se
 #   [t=  X.XX s] CTX_SWITCH type=<complete|preempt|resume>  n_tokens=NNN elapsed_us=NNN
 #
 # The recipe captures those lines into a CSV for plot_ctx_switch.
-# Run:   just -f scripts/bench.just bench_ctx_switch
-# Plot:  just -f scripts/bench.just plot_ctx_switch <csv>
+# Run:   just bench_ctx_switch
+# Plot:  just plot_ctx_switch <csv>
 bench_ctx_switch n_parallel="2" n_seq="8" n_predict="20" arrival_interval_ms="8000" size_mem="8G":
 	#!/usr/bin/env bash
 	set -e
@@ -388,7 +385,7 @@ bench_ctx_switch n_parallel="2" n_seq="8" n_predict="20" arrival_interval_ms="80
 	n_ctx=$(( (2 * {{n_parallel}} + 1) * 512 ))
 	append_args="llama-parallel -m /root/models/Llama-3.2-1B-Instruct-f16.gguf -np {{n_parallel}} -ns {{n_seq}} -n {{n_predict}} -c $n_ctx -t 1 -ngl 0 --arrival-interval-ms {{arrival_interval_ms}}"
 
-	just -f {{source_file()}} _qemu {{parallel_img}} "$append_args" {{size_mem}} \
+	just -f {{justfile()}} _qemu {{parallel_img}} "$append_args" {{size_mem}} \
 		2>&1 | tee "$log"
 
 	echo "type,n_tokens,elapsed_us" > "$out_csv"
@@ -404,4 +401,4 @@ bench_ctx_switch n_parallel="2" n_seq="8" n_predict="20" arrival_interval_ms="80
 	echo "Done. CSV: $out_csv"
 
 
-# just -f scripts/bench.just plot_parallel_sweep bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_latency_sweep bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_kv_memory bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_ctx_switch bench/out/ctx_switch/ctx_switch.csv
+# just plot_parallel_sweep bench/out/parallel_sweep/sweep.csv && just plot_latency_sweep bench/out/parallel_sweep/sweep.csv && just plot_kv_memory bench/out/parallel_sweep/sweep.csv && just plot_ctx_switch bench/out/ctx_switch/ctx_switch.csv

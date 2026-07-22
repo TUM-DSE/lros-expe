@@ -1,5 +1,8 @@
 import "scripts/deps.just"
 import "scripts/vm.just"
+import "scripts/build.just"
+import "scripts/plot.just"
+import "scripts/bench.just"
 
 proot := justfile_directory()
 

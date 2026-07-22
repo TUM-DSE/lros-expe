@@ -29,7 +29,7 @@ _qemu img append size="16G" vaccel="false":
 		-smp cpus=1,threads=1,sockets=1 \
 		-parallel none \
 		-device virtio-9p-pci,fsdev=rootfs,mount_tag=rootfs \
-		-fsdev local,id=rootfs,path={{proot}}/..,security_model=mapped-xattr \
+		-fsdev local,id=rootfs,path={{proot}},security_model=mapped-xattr \
 		-nic none \
 		-display none \
 		-nographic \
@@ -40,16 +40,16 @@ _qemu img append size="16G" vaccel="false":
 		-enable-kvm
 
 run_lros img out out_err size_mem="16G" batch_size="1" vaccel="false":
-	just -f {{source_directory()}}/bench.just _qemu {{img}} \
+	just -f {{justfile()}} _qemu {{img}} \
 		"llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
 		{{size_mem}} {{vaccel}} \
 		> {{out}} \
 		2> {{out_err}}
 
 run_lros_stdout img size_mem="16G" args="":
-	@just -f {{source_directory()}}/bench.just _qemu {{img}} "{{args}}" {{size_mem}}
+	@just -f {{justfile()}} _qemu {{img}} "{{args}}" {{size_mem}}
 
 run_parallel size_mem="16G" batch_size="1":
-	just -f {{source_directory()}}/bench.just _qemu {{parallel_img}} \
+	just -f {{justfile()}} _qemu {{parallel_img}} \
 		"llama-parallel -np 2 -ns 6 --arrival-interval-ms 10000 -n 20 -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
 		{{size_mem}}
