@@ -24,7 +24,7 @@ _plugins := if path_exists("/sys/devices/platform/fdab0000.npu") == "true" { env
 
 export VACCEL_PLUGINS := _plugins
 
-bench spec variant="all" model="Llama-3.2-1B-Instruct-f16.gguf" cpu_type="big" size_mem="10G" log_power="false" batch_size="1": #(build spec variant)
+bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size="1": #(build spec variant)
 	#!/usr/bin/env bash
 
 	set -ex
@@ -37,6 +37,7 @@ bench spec variant="all" model="Llama-3.2-1B-Instruct-f16.gguf" cpu_type="big" s
 	if [ -d /sys/devices/platform/fdab0000.npu ]; then
 		powerlogger="measure_orangepi"
 	elif [ -d /proc/driver/nvidia/ ]; then
+		export LD_LIBRARY_PATH=/run/opengl-driver/lib:$LD_LIBRARY_PATH
 		powerlogger="measure_jetson 0.1"
 	fi
 
@@ -45,9 +46,9 @@ bench spec variant="all" model="Llama-3.2-1B-Instruct-f16.gguf" cpu_type="big" s
 		exit 1
 	fi
 
-	d="$batch_size-$(date -Iseconds)"
 	log_power={{log_power}}
 	batch_size={{batch_size}}
+	d="$batch_size-$(date -Iseconds)"
 
 	case {{lowercase(spec)}} in
 		lros)
@@ -56,151 +57,83 @@ bench spec variant="all" model="Llama-3.2-1B-Instruct-f16.gguf" cpu_type="big" s
 			fi
 			cp -fl {{proot}}/../config/mat_kernel_size_$batch_size.json {{proot}}/../config/mat_kernel_size.json
 			case {{lowercase(variant)}} in
-				all | vaccel )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel_$d.power.txt & fi
-					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build-vaccel/bench-vaccel_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_vaccel_$d.out.txt \
-						{{OUT_DIR}}/bench_lros_vaccel_$d.err.txt \
-						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then pkill -P $!; fi
-				;;&
-				all | vaccel-novec )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vaccel-novec_$d.power.txt & fi
-					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build-vaccel-novec/bench-vaccel-novec_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.out.txt \
-						{{OUT_DIR}}/bench_lros_vaccel-novec_$d.err.txt \
-						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then pkill -P $!; fi
-				;;&
-				all | vacceloh )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vacceloh_$d.power.txt & fi
-					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build-vacceloh/bench-vacceloh_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_vacceloh_$d.out.txt \
-						{{OUT_DIR}}/bench_lros_vacceloh_$d.err.txt \
-						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then pkill -P $!; fi
-				;;&
-				all | vacceloh-novec )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_vacceloh-novec_$d.power.txt & fi
-					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build-vacceloh-novec/bench-vacceloh-novec_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_vacceloh-novec_$d.out.txt \
-						{{OUT_DIR}}/bench_lros_vacceloh-novec_$d.err.txt \
-						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then pkill -P $!; fi
-				;;&
-				all | cpu )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu_$d.power.txt & fi
-					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_cpu_$d.out.txt \
-						{{OUT_DIR}}/bench_lros_cpu_$d.err.txt \
-						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then pkill -P $!; fi
-				;;&
-				all | cpu-novec )
-					if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_cpu-novec_$d.power.txt & fi
-					just -f {{source_file()}} run_lros \
-						{{LROS_PATH}}/.unikraft/build-cpu-novec/bench-cpu-novec_qemu-arm64 \
-						{{OUT_DIR}}/bench_lros_cpu-novec_$d.out.txt \
-						{{OUT_DIR}}/bench_lros_cpu-novec_$d.err.txt \
-						{{ cpu_type }} {{ size_mem }} {{ batch_size }}
-					if [ $log_power = true ]; then pkill -P $!; fi
-				;;&
-				all | vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec)
-				;;
+				vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec )
+					variants={{lowercase(variant)}} ;;
+				all )
+					variants="vaccel vaccel-novec vacceloh vacceloh-novec cpu cpu-novec" ;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
-				;;
+					variants="" ;;
 			esac
+
+			for v in $variants; do
+				if [ $log_power = true ]; then just -f {{source_directory()}}/power.just $powerlogger > {{OUT_DIR}}/bench_lros_${v}_$d.power.txt & fi
+				just -f {{source_file()}} run_lros \
+					{{LROS_PATH}}/.unikraft/build-${v}/bench-${v}_qemu-arm64 \
+					{{OUT_DIR}}/bench_lros_${v}_$d.out.txt \
+					{{OUT_DIR}}/bench_lros_${v}_$d.err.txt \
+					{{ size_mem }} {{ batch_size }}
+				if [ $log_power = true ]; then pkill -P $!; fi
+			done
 		;;
 
 		linux-vm | vm)
 			case {{lowercase(variant)}} in
-				all | cpu )
-					just -f {{source_file()}} EVAL_ARGS="{{EVAL_ARGS}} -npl {{batch_size}}" run_vm \
-					{{OUT_DIR}}/bench_vm_cpu_$d.out.txt \
-					{{OUT_DIR}}/bench_vm_cpu_$d.err.txt \
-					build {{size_mem}} {{cpu_type}}
-				;;&
-				all | cpu-novec )
-					just -f {{source_file()}} EVAL_ARGS="{{EVAL_ARGS}} -npl {{batch_size}}" run_vm \
-					{{OUT_DIR}}/bench_vm_cpu-novec_$d.out.txt \
-					{{OUT_DIR}}/bench_vm_cpu-novec_$d.err.txt \
-					build-novec {{size_mem}} {{cpu_type}}
-				;;&
-				all | cpu | cpu-novec)
-				;;
+				cpu | cpu-novec )
+					variants={{lowercase(variant)}} ;;
+				all )
+					variants="cpu cpu-novec" ;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
-				;;
+					variants="" ;;
 			esac
+
+			for v in $variants; do
+				just -f {{source_file()}} EVAL_ARGS="{{EVAL_ARGS}} -npl {{batch_size}}" run_vm \
+					{{OUT_DIR}}/bench_vm_${v}_$d.out.txt \
+					{{OUT_DIR}}/bench_vm_${v}_$d.err.txt \
+					build-${v} {{size_mem}}
+			done
 		;;
 
 		linux | process)
-			case {{lowercase(variant)}} in
-				all | cpu )
-					taskset -c {{AFFINITY}} \
-					{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
-						-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-						2> >(tee {{OUT_DIR}}/bench_process_cpu_$d.err.txt >&2) \
-						| tee {{OUT_DIR}}/bench_process_cpu_$d.out.txt
-				;;&
-				all | cpu-novec )
-					taskset -c {{AFFINITY}} \
-					{{proot}}/../lros/llama.cpp-rknn/build-novec/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
-						-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-						2> >(tee {{OUT_DIR}}/bench_process_cpu-novec_$d.err.txt >&2) \
-						| tee {{OUT_DIR}}/bench_process_cpu-novec_$d.out.txt
-				;;&
-				all | cuda )
-					# CUDA
-					if [ -d /proc/driver/nvidia/ ]; then
-						LD_LIBRARY_PATH=/run/opengl-driver/lib taskset -c {{AFFINITY}} \
-						{{proot}}/../lros/llama.cpp-rknn/build-cuda/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
-							-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-							2> >(tee {{OUT_DIR}}/bench_process_cuda_$d.err.txt >&2) \
-							| tee {{OUT_DIR}}/bench_process_cuda_$d.out.txt
-					elif [ {{lowercase(variant)}} == "cuda" ]; then
-						echo "Cannot execute CUDA on this device. Could not find GPU driver." >&2
-						exit 1
-					fi
-				;;&
-				all | rknn )
-					# RKNN
-					if [ -d /sys/devices/platform/fdab0000.npu ]; then
-						taskset -c {{AFFINITY}} \
-						{{proot}}/../lros/llama.cpp-rknn/build-rknn/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
-							-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-							2> >(tee {{OUT_DIR}}/bench_process_rknn_$d.err.txt >&2) \
-							| tee {{OUT_DIR}}/bench_process_rknn_$d.out.txt
-					elif [ {{lowercase(variant)}} == "rknn" ]; then
-						echo "Cannot execute RKNN on this device. Could not find NPU." >&2
-						exit 1
-					fi
-				;;&
-				all | rknnoh )
-					# RKNN
-					if [ -d /sys/devices/platform/fdab0000.npu ]; then
-						taskset -c {{AFFINITY}} \
-						{{proot}}/../lros/llama.cpp-rknn/build-rknnoh/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
-							-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-							2> >(tee {{OUT_DIR}}/bench_process_rknnoh_$d.err.txt >&2) \
-							| tee {{OUT_DIR}}/bench_process_rknnoh_$d.out.txt
-					elif [ {{lowercase(variant)}} == "rknnoh" ]; then
-						echo "Cannot execute RKNN-OH on this device. Could not find NPU." >&2
-						exit 1
-					fi
-				;;&
-				all | cpu | cuda | rknn | rknnoh)
-				;;
+			requested={{lowercase(variant)}}
+			case $requested in
+				cpu | cpu-novec | cuda | rknn | rknnoh )
+					variants=$requested ;;
+				all )
+					variants="cpu cpu-novec cuda rknn rknnoh" ;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
-				;;
+					variants="" ;;
 			esac
+
+			for v in $variants; do
+				# For `all`, silently skip variants whose hardware is absent;
+				# for an explicit request, report the missing device.
+				case $v in
+					cuda )
+						if [ ! -d /proc/driver/nvidia/ ]; then
+							[ "$requested" = all ] && continue
+							echo "Cannot execute CUDA on this device. Could not find GPU driver." >&2
+							exit 1
+						fi
+					;;
+					rknn | rknnoh )
+						if [ ! -d /sys/devices/platform/fdab0000.npu ]; then
+							[ "$requested" = all ] && continue
+							echo "Cannot execute RKNN on this device. Could not find NPU." >&2
+							exit 1
+						fi
+					;;
+				esac
+
+				taskset -c {{AFFINITY}} \
+				{{proot}}/../lros/llama.cpp-rknn/build-${v}/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
+					-m {{model}} \
+					2> >(tee {{OUT_DIR}}/bench_process_${v}_$d.err.txt >&2) \
+					| tee {{OUT_DIR}}/bench_process_${v}_$d.out.txt
+			done
 		;;
 	esac
 
