@@ -11,6 +11,9 @@ LLAMA_CPP_TARGETS := "llama-batched-bench"
 OUT_DIR := proot + "/../bench/out"
 parallel_img := LROS_PATH + "/.unikraft/build-parallel/parallel_qemu-arm64"
 
+MODEL := proot + "/../models/Llama-3.2-1B-Instruct-f16.gguf"
+LLAMACPP_BIN := proot + "/../lros/llama.cpp-rknn/build/bin/llama-batched-bench"
+
 EVAL_ARGS := "-npp 16,32 -ntg 1,128,256 -t 1 -ngl 0 --no-mmap --no-perf"
 EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 0 --no-mmap --no-perf"
 
@@ -211,13 +214,13 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 
 	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
 		-o {{OUT_DIR}}/thp/perf_base_$d.json \
-		{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+		{{LLAMACPP_BIN}} {{EVAL_ARGS}} -m {{MODEL}} \
 		2> >(tee {{OUT_DIR}}/thp/bench_base_$d.err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_base_$d.out.txt
 
 	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
 		-o {{OUT_DIR}}/thp/perf_thp_$d.json \
-		{{proot}}/../lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+		{{proot}}/../lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{MODEL}} \
 		2> >(tee {{OUT_DIR}}/thp/bench_thp_$d.err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_thp_$d.out.txt
 
@@ -235,14 +238,14 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 		# Linux process (host) — cgroup MemoryMax=$m matches the VM memory size
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
-			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench $args --no-mmap \
-			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+			{{LLAMACPP_BIN}} $args --no-mmap \
+			-m {{MODEL}} \
 			> {{OUT_DIR}}/paging/bench_paging_"$m"_read.out.txt \
 			2> {{OUT_DIR}}/paging/bench_paging_"$m"_read.err.txt
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
-			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench $args \
-			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+			{{LLAMACPP_BIN}} $args \
+			-m {{MODEL}} \
 			> {{OUT_DIR}}/paging/bench_paging_"$m"_mmap.out.txt \
 			2> {{OUT_DIR}}/paging/bench_paging_"$m"_mmap.err.txt
 
@@ -304,14 +307,14 @@ paging_motiv:
 	for m in "4096M" "3072M" "2816M" "2560M" "2048M"; do
 		sudo bash -c "echo 1 > /proc/sys/vm/drop_caches"
 		run_bench "$m" "mmap" \
-			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench \
+			{{LLAMACPP_BIN}} \
 			-npp 16 -ntg 32 -npl 1 -t 1 --no-perf \
-			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf
+			-m {{MODEL}}
 		sudo bash -c "echo 1 > /proc/sys/vm/drop_caches"
 		run_bench "$m" "read" \
-			{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench \
+			{{LLAMACPP_BIN}} \
 			-npp 16 -ntg 32 -npl 1 -t 1 --no-mmap --no-perf \
-			-m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf
+			-m {{MODEL}}
 	done
 	just -f {{source_file()}} run_lros_stdout {{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 2048 "llama-batched-bench libukvmem.prefetch_size=64 -- -npp 16 -ntg 32 -npl 1 -t 1 --no-perf -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" | to_csv "2048" "lros"
 
