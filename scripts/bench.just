@@ -20,6 +20,10 @@ EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 0 --no-mmap --no-perf"
 cpu_type := "big"
 AFFINITY := if cpu_type == "big" { "4-4" } else { "0-0" }
 
+_plugins := if path_exists("/sys/devices/platform/fdab0000.npu") == "true" { env("VACCEL_PLUGINS_RKNN", "") } else if path_exists("/proc/driver/nvidia/") == "true" { env("VACCEL_PLUGINS_CUDA", "") } else {""}
+
+export VACCEL_PLUGINS := _plugins
+
 bench spec variant="all" model="Llama-3.2-1B-Instruct-f16.gguf" cpu_type="big" size_mem="10G" log_power="false" batch_size="1": #(build spec variant)
 	#!/usr/bin/env bash
 
@@ -27,15 +31,12 @@ bench spec variant="all" model="Llama-3.2-1B-Instruct-f16.gguf" cpu_type="big" s
 
 	mkdir -p {{OUT_DIR}}
 
-	unset VACCEL_PLUGINS
 	unset VACCEL_BACKENDS
 
 	# Detect if we are on NPU or GPU system
 	if [ -d /sys/devices/platform/fdab0000.npu ]; then
-		export VACCEL_PLUGINS=$VACCEL_PLUGINS_RKNN
 		powerlogger="measure_orangepi"
 	elif [ -d /proc/driver/nvidia/ ]; then
-		export VACCEL_PLUGINS=$VACCEL_PLUGINS_CUDA
 		powerlogger="measure_jetson 0.1"
 	fi
 
