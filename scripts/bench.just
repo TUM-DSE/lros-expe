@@ -1,4 +1,5 @@
 import? "../justfile"
+import "plot.just"
 
 LROS_IMAGE_NAME := "llama.cpp_qemu-arm64"
 LROS_PATH := proot + "/../lros/"
@@ -615,30 +616,6 @@ bench_parallel_sweep n_parallel_max="12" n_predict="20" n_runs="5" tokens_per_se
 
     echo "Sweep complete. Results: $out_csv"
 
-plot_parallel_sweep csv out="":
-    #!/usr/bin/env bash
-    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
-    out="{{out}}"
-    [ -z "$out" ] && out="${csv_path%.csv}_throughput.pdf"
-    cd {{source_directory()}}/plots
-    python3 parallel_sweep.py "$csv_path" "$out"
-
-plot_latency_sweep csv out="":
-    #!/usr/bin/env bash
-    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
-    out="{{out}}"
-    [ -z "$out" ] && out="${csv_path%.csv}_latency.pdf"
-    cd {{source_directory()}}/plots
-    python3 latency_sweep.py "$csv_path" "$out"
-
-plot_kv_memory csv out="":
-    #!/usr/bin/env bash
-    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
-    out="{{out}}"
-    [ -z "$out" ] && out="${csv_path%.csv}_kv_memory.pdf"
-    cd {{source_directory()}}/plots
-    python3 kv_memory.py "$csv_path" "$out"
-
 # ─── Context-switch latency (i) ──────────────────────────────────────────────
 #
 # Runs the parallel benchmark with np=2 slots, ns=8 requests staggered every
@@ -692,14 +669,5 @@ bench_ctx_switch n_parallel="2" n_seq="8" n_predict="20" arrival_interval_ms="80
     done < <(grep "CTX_SWITCH" "$log" || true)
 
     echo "Done. CSV: $out_csv"
-
-# Plot context-switch latency as a grouped bar chart (complete / preempt / resume).
-plot_ctx_switch csv out="":
-    #!/usr/bin/env bash
-    csv_path="$(cd "{{invocation_directory()}}" && realpath "{{csv}}")"
-    out="{{out}}"
-    [ -z "$out" ] && out="${csv_path%.csv}.pdf"
-    cd {{source_directory()}}/plots
-    python3 ctx_switch.py "$csv_path" "$out"
 
 # just -f scripts/bench.just plot_parallel_sweep bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_latency_sweep bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_kv_memory bench/out/parallel_sweep/sweep.csv && just -f scripts/bench.just plot_ctx_switch bench/out/ctx_switch/ctx_switch.csv
