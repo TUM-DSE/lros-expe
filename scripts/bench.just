@@ -207,17 +207,19 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 
 	mkdir -p {{OUT_DIR}}/thp
 
-	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
-		-o {{OUT_DIR}}/thp/perf_base_$(date -Iseconds).json \
-		{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-		2> >(tee {{OUT_DIR}}/thp/bench_base_$(date -Iseconds).err.txt >&2) \
-		| tee {{OUT_DIR}}/thp/bench_base_$(date -Iseconds).out.txt
+	d=$(date -Iseconds)
 
 	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
-		-o {{OUT_DIR}}/thp/perf_thp_$(date -Iseconds).json \
+		-o {{OUT_DIR}}/thp/perf_base_$d.json \
+		{{proot}}/../lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
+		2> >(tee {{OUT_DIR}}/thp/bench_base_$d.err.txt >&2) \
+		| tee {{OUT_DIR}}/thp/bench_base_$d.out.txt
+
+	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
+		-o {{OUT_DIR}}/thp/perf_thp_$d.json \
 		{{proot}}/../lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{proot}}/../models/Llama-3.2-1B-Instruct-f16.gguf \
-		2> >(tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).err.txt >&2) \
-		| tee {{OUT_DIR}}/thp/bench_thp_$(date -Iseconds).out.txt
+		2> >(tee {{OUT_DIR}}/thp/bench_thp_$d.err.txt >&2) \
+		| tee {{OUT_DIR}}/thp/bench_thp_$d.out.txt
 
 paging: #(build "linux" "cpu") (build "lros" "cpu")
 	#!/usr/bin/env bash
