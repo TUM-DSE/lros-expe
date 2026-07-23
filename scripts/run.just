@@ -39,12 +39,21 @@ _qemu img append size="16G" vaccel="false":
 		{{ if vaccel == "true" { "-object acceldev-backend-vaccel,id=gen0 -device virtio-accel-pci,id=accl0,runtime=gen0,disable-legacy=off,disable-modern=on,event_idx=off" } else { "" } }} \
 		-enable-kvm
 
-run_lros img out out_err size_mem="16G" batch_size="1" vaccel="false":
-	just -f {{justfile()}} _qemu {{img}} \
-		"llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
-		{{size_mem}} {{vaccel}} \
-		> {{out}} \
-		2> {{out_err}}
+# Pass tee="true" to also stream stdout/stderr to the console while still
+# capturing them to the out/out_err files. Shebang recipe (bash) both for the
+# process substitution and so just doesn't echo the long qemu invocation.
+run_lros img out out_err size_mem="16G" batch_size="1" vaccel="false" model="Llama-3.2-1B-Instruct-f16.gguf" tee="true":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cmd="llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} -m /root/models/{{model}}"
+	if [ "{{tee}}" = "true" ]; then
+		just -f {{justfile()}} _qemu {{img}} "$cmd" {{size_mem}} {{vaccel}} \
+			2> >(tee {{out_err}} >&2) \
+			| tee {{out}}
+	else
+		just -f {{justfile()}} _qemu {{img}} "$cmd" {{size_mem}} {{vaccel}} \
+			> {{out}} 2> {{out_err}}
+	fi
 
 run_lros_stdout img size_mem="16G" args="":
 	@just -f {{justfile()}} _qemu {{img}} "{{args}}" {{size_mem}}

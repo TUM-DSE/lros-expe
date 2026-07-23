@@ -134,6 +134,84 @@ bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size
 		;;
 	esac
 
+# ─── Motivation device-perf: TTFT/TPOT prompt-length sweep ───────────────────
+#
+# Prompt-length sweep with llama-batched-bench for the first plot of
+# scripts/plots/mot_device-perf.py. Measures five configs:
+#   lros unikernel : cpu, vaccel, vacceloh   (run in QEMU)
+#   host (native)  : rknn, rknnoh            (run directly on the NPU)
+# TTFT = T_PP, TPOT = T_TG / n_gen, parsed from the llama-batched-bench table.
+# Each run lands in its own timestamped dir bench/out/device_perf/<timestamp>/
+# (device_perf.csv + raw logs); the plot reads the most recent one. Only
+# cpu/vaccel/rknn are plotted; vacceloh/rknnoh are collected for later use.
+#
+# Build first (kraft rebuilds every time, so it is not an automatic dependency):
+#   just build lros cpu && just build lros vaccel && just build lros vacceloh
+#   just build linux rknn && just build linux rknnoh
+#
+# `model` is a gguf filename resolved under models/ (host) and /root/models/
+# (guest). lros configs go through run_lros; vaccel/vacceloh pass vaccel=true so
+# QEMU attaches the vAccel host backend.
+DEVICE_PERF_MODEL := file_name(MODEL)
+bench_device_perf model=DEVICE_PERF_MODEL prompts="1,16,32,64,128,256" n_gen="16" size_mem="10G" n_runs="3":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	ts="$(date -Iseconds)"
+	run_dir="{{OUT_DIR}}/device_perf/$ts"
+	mkdir -p "$run_dir"
+	csv="$run_dir/device_perf.csv"
+	# Each config is measured {{n_runs}} times; the `run` column indexes the
+	# repetition so downstream aggregation can compute mean/spread per point.
+	echo "timestamp,type,model,run,prompt_token_count,n_gen,ttft_s,tpot_s" > "$csv"
+
+	# -npl is appended by run_lros (and explicitly for the host runs below).
+	args=(-npp {{prompts}} -ntg {{n_gen}} -t 1 -ngl 0 --no-mmap --no-perf)
+
+	# Parse a llama-batched-bench markdown table (on stdin) into CSV rows <type>.
+	# Columns: | PP | TG | B | N_KV | T_PP s | S_PP | T_TG s | S_TG | T s | S |
+	to_csv() { # $1 = type label, $2 = run index
+		awk -F'|' -v ts="$ts" -v type="$1" -v run="$2" -v model="{{model}}" '
+			/^\|[[:space:]]*[0-9]/ {
+				for (i = 1; i <= NF; i++) gsub(/[[:space:]]/, "", $i)
+				tpot = ($3 > 0) ? $8 / $3 : 0
+				printf "%s,%s,%s,%s,%s,%s,%s,%.6f\n", ts, type, model, run, $2, $3, $6, tpot
+			}'
+	}
+
+	for run in $(seq 1 {{n_runs}}); do
+		# lros unikernel configs (run in QEMU via run_lros). vaccel/vacceloh need
+		# the vAccel host backend, so they are launched with vaccel=true.
+		for v in cpu vaccel vacceloh; do
+			vaccel=false; [ "$v" = cpu ] || vaccel=true
+			out="$run_dir/lros_${v}_run${run}.out.txt"
+			err="$run_dir/lros_${v}_run${run}.err.txt"
+			just -f {{justfile()}} EVAL_ARGS="${args[*]}" run_lros \
+				{{LROS_PATH}}/.unikraft/build-${v}/bench-${v}_qemu-arm64 \
+				"$out" "$err" {{size_mem}} 1 "$vaccel" {{model}}
+			to_csv "$v" "$run" < "$out" >> "$csv"
+		done
+
+		# Native host configs — run the rknn-backed binary directly on the NPU.
+		if [ ! -d /sys/devices/platform/fdab0000.npu ]; then
+			echo "No RKNN NPU found; skipping rknn/rknnoh." >&2
+		else
+			for v in rknn rknnoh; do
+				out="$run_dir/host_${v}_run${run}.out.txt"
+				err="$run_dir/host_${v}_run${run}.err.txt"
+				taskset -c {{AFFINITY}} \
+					{{proot}}/lros/llama.cpp-rknn/build-${v}/bin/llama-batched-bench \
+					"${args[@]}" -npl 1 -m {{proot}}/models/{{model}} \
+					2> >(tee "$err" >&2) \
+					| tee "$out"
+				to_csv "$v" "$run" < "$out" >> "$csv"
+			done
+		fi
+	done
+
+	echo "Wrote $csv"
+	column -t -s, "$csv"
+
 hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 	#!/usr/bin/env bash
 
