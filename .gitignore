@@ -3,3 +3,4 @@ VMs/
 .cache
 .nix-channels
 .lesshst
+.direnv
