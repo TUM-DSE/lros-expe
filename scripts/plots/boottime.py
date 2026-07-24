@@ -20,7 +20,7 @@ def main():
 
     # matplotlib.use('TkAgg')
 
-    fig, ax = plt.subplots(figsize=(figwidth_half, fig_height))
+    fig, ax = plt.subplots(figsize=(figwidth_third, 1.6))
 
     plot = sns.barplot(ax=ax, data=data, y="level_0", x="QEMU: kvm_cpu_exec",
                        color=palette[0]  # , style = "level_0"
@@ -128,9 +128,9 @@ def main():
     # ax.add_artist(l1)
 
     ax.set_ylabel(None)
-    ax.set_xlabel("Time (s)")
+    ax.set_xlabel("Boot time (s)")
     #ax.set_ylim(0,11.5)
-    ax.set_title(left_better_str, fontsize=FONTSIZE, color="navy")
+    ax.set_title(f"(a) {left_better_str}", fontsize=FONTSIZE, color="navy")
     plt.tight_layout(pad=0.1)
     plt.savefig(os.path.join(plots_dir, "boottime.pdf"), format="pdf")
 

@@ -15,7 +15,7 @@ def main():
     data = load_data()
     #print(data)
 
-    fig, ax = plt.subplots(figsize=(figwidth_half, fig_height))
+    fig, ax = plt.subplots(figsize=(figwidth_third, 1.6))
     data_melt = data.melt(var_name="System", value_name="Memory usage")
     data_melt["memMB"] = data_melt["Memory usage"]/1024
     plot = sns.barplot(ax=ax, data=data_melt, y ="System", x ="memMB", hue="System", errorbar="ci"
@@ -34,26 +34,26 @@ def main():
     # #    bbox_to_anchor=(0.5, -0.15),
     # #    ncol=2,
     # )
-    ax.set_title(left_better_str, fontsize=FONTSIZE, color="navy")
+    ax.set_title(f"(c) {left_better_str}", fontsize=FONTSIZE, color="navy")
 
-    patch_linux = ax.patches[1]
+    patch_linux = ax.patches[0]
 
-    ax.text(
-        patch_linux.get_width()-22,
-        patch_linux.get_y()+patch_linux.get_height() / 2.0,
+    ax.annotate(
         f"{patch_linux.get_width():.0f} MiB",
-        ha="center",
+        (patch_linux.get_width(), patch_linux.get_y() + patch_linux.get_height() / 2.0),
+        xytext=(-8, 0), textcoords="offset points",
+        ha="right",
         va="center",
         fontsize=5,
     )
 
-    patch_lros = ax.patches[0]
+    patch_lros = ax.patches[1]
 
-    ax.text(
-        patch_lros.get_width()-28,
-        patch_lros.get_y()+patch_lros.get_height() / 2.0,
+    ax.annotate(
         f"{patch_lros.get_width():.0f} MiB",
-        ha="center",
+        (patch_lros.get_width(), patch_lros.get_y() + patch_lros.get_height() / 2.0),
+        xytext=(2, 0), textcoords="offset points",
+        ha="left",
         va="center",
         fontsize=5,
         )
