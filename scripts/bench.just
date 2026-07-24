@@ -246,6 +246,9 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 	args="-npp 16 -ntg 8 -npl 1 -t 1 --no-perf"
 
 	for m in "16G" "2G"; do
+		# Evict the model from the page cache before each run so no config
+		# benefits from a previous run's warm cache
+		vmtouch -qe {{MODEL}}
 		# Linux process (host) — cgroup MemoryMax=$m matches the VM memory size
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
@@ -253,6 +256,7 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 			-m {{MODEL}} \
 			2> >(tee "$out_dir"/bench_paging_"$m"_read.err.txt >&2) \
 			| tee "$out_dir"/bench_paging_"$m"_read.out.txt || [[ $m == 2G ]]
+		vmtouch -qe {{MODEL}}
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
 			{{LLAMACPP_BIN}} $args \
@@ -261,6 +265,7 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 			| tee "$out_dir"/bench_paging_"$m"_mmap.out.txt
 
 		# LROS
+		vmtouch -qe {{MODEL}}
 		just -f {{justfile()}} EVAL_ARGS="$args --no-mmap" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 			"$out_dir"/bench_paging_"$m"_lrosread.out.txt \
@@ -276,6 +281,7 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 			buf_size=64
 		fi
 
+		vmtouch -qe {{MODEL}}
 		just -f {{justfile()}} EVAL_ARGS="libukvmem.prefetch_size=$buf_size -- $args" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 			"$out_dir"/bench_paging_"$m"_lrosprefetch.out.txt \

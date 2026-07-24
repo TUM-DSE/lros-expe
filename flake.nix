@@ -47,6 +47,7 @@
             bc
             stress
             ncurses
+            vmtouch
           ];
           LINUX="${pkgs.linuxPackages_latest.kernel}";
           shellHook = lib.optionalString (system == "aarch64-linux") ''
