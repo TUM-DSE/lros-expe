@@ -3,6 +3,7 @@
 from io import StringIO
 
 import pandas as pd
+from pandas import DataFrame
 
 from common import *
 
@@ -52,7 +53,7 @@ def load_data() -> pd.DataFrame:
     eval_path = os.path.join(result_dir, "paging")
     dfs = []
     specs = {
-        #"mmap": "mmap",
+        # "mmap": "mmap",
         "prefetch": "mmap",
         "read": "read",
         "lrosread": "lros: read",
@@ -62,8 +63,8 @@ def load_data() -> pd.DataFrame:
     # specs_names = ["mmap + POPULATE", "mmap", "read", "lros read", "lros mmap prefetch"]
 
     variants = {
-        "16G" : "in-memory",
-        "2G" : "out-of-memory"
+        "16G": "in-memory",
+        "2G": "out-of-memory"
     }
     # variants = ["16G", "2G"]
 
@@ -105,15 +106,71 @@ def load_data() -> pd.DataFrame:
 
 def main():
     data = load_data()
-    print(data)
     data["prompt_time_cum"] = data["load_time"] + data["T_PPs"]
     data["tg_time_cum"] = data["prompt_time_cum"] + data["T_TGs"]
 
-    fig, (ax,ax1) = plt.subplots(1,2,figsize=(figwidth_full_thesis, fig_height), layout="constrained")
+    fig, (sax1, sax2) = plt.subplots(1, 2, figsize=(figwidth_full, fig_height), layout="constrained")
+    make_ttft_plot(sax1, data)
+    sax1.set_title("(a) " + sax1.get_title())
+
+    fig1, ax = plt.subplots(figsize=(figwidth_third, 1.6))
+    make_ttft_plot(ax, data)
+    # Extra headroom so the two legends fit above the bars at third width
+    ax.set_ylim(0, 450)
+    fig1.tight_layout(pad=0.1)
+    legend = fig1.legend()
+    legend.remove()
+    handles, labels = ax.get_legend_handles_labels()
+    leg = ax.get_legend()
+    leg1=ax.legend(handles[:-2], labels[:-2], loc="upper left")
+    for patch in leg1.legend_handles:
+        patch.set_hatch('')
+    ax.add_artist(leg)
+    fig1.savefig(os.path.join(plots_dir, f"paging-ttft.pdf"), format="pdf")
+
+    # -------------
+    make_throughput_plot(sax2, data)
+    sax2.set_title("(b) " + sax2.get_title())
+
+    fig1, ax = plt.subplots(figsize=(figwidth_half, fig_height))
+    make_throughput_plot(ax, data)
+    ax.legend(fontsize=FONTSIZE, loc='upper right', ncol=2)
+    fig1.tight_layout(pad=0.1)
+    fig1.savefig(os.path.join(plots_dir, f"paging-tp.pdf"), format="pdf")
+
+    handles, labels = sax2.get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=FONTSIZE, loc='outside lower center', ncol=4)
+    # fig.tight_layout()
+    fig.get_layout_engine().set(w_pad=1 / 72, h_pad=2 / 72, hspace=0,
+                                wspace=0.1)
+    fig.savefig(os.path.join(plots_dir, f"paging.pdf"), format="pdf")
+
+
+def make_throughput_plot(ax, data: DataFrame):
+    plot = sns.barplot(ax=ax, data=data, x="level_1", y="S_TGt/s",
+                       hue="level_0"  # , style = "level_0"
+                       , palette=palette[:4]
+                       , zorder=-2
+                       , edgecolor="black", linewidth=0.5,
+                       #  hue_order = get_order('vmcache')
+                       # marker="H"
+                       )
+    plot.set_yscale("log")
+    # ax.legend(fontsize=FONTSIZE, loc='upper right', ncol=2)
+    ax.get_legend().remove()
+    ax.set_xlabel(None)
+    ax.set_ylabel("Throughput (tk/s)")
+    # ax.set_ylim(0,235)
+    # ax.yaxis.set_label_position("right")
+    # ax.yaxis.tick_right()
+    ax.set_title(f"{higher_better_str}", fontsize=FONTSIZE, color="navy")
+
+
+def make_ttft_plot(ax, data: DataFrame):
     plot = sns.barplot(ax=ax, data=data, x="level_1", y="load_time",
                        hue="level_0"  # , style = "level_0"
                        , edgecolor="black", linewidth=0.5
-                       , palette=palette
+                       , palette=palette[:4]
                        #  hue_order = get_order('vmcache')
                        # marker="H"
                        )
@@ -123,7 +180,7 @@ def main():
             x.set_label("_")
     plot = sns.barplot(ax=ax, data=data, x="level_1", y="prompt_time_cum",
                        hue="level_0"  # , style = "level_0"
-                       , palette=palette
+                       , palette=palette[:4]
                        , zorder=-1
                        , edgecolor="black", linewidth=0.5,
                        #  hue_order = get_order('vmcache')
@@ -138,46 +195,16 @@ def main():
 
     hidden = [ax.bar(0, 0, color="gray", hatch=hatch_def[0], label="Load"),
               ax.bar(0, 0, color="gray", hatch=hatch_def[5], label="Prompt"),
-              #ax.bar(0, 0, color="gray", hatch=hatch_def[2], label="TextGen")
+              # ax.bar(0, 0, color="gray", hatch=hatch_def[2], label="TextGen")
               ]
 
     plot.legend(handles=hidden, loc='upper right', fontsize=FONTSIZE)
     # ax.add_artist(l1)
 
     ax.set_xlabel(None)
-    ax.set_ylabel("Time (s)")
-    ax.set_ylim(0,235)
-    ax.set_title(f"(a) {lower_better_str}", fontsize=FONTSIZE, color="navy")
-
-    # fig.savefig(os.path.join(plots_dir, f"paging-cold-start.pdf"), format="pdf", pad_inches=0, bbox_inches="tight")
-
-
-# -------------
-
-    plot = sns.barplot(ax=ax1, data=data, x="level_1", y="S_TGt/s",
-                       hue="level_0"  # , style = "level_0"
-                       , palette=palette
-                       , zorder=-2
-                       , edgecolor="black", linewidth=0.5,
-                       #  hue_order = get_order('vmcache')
-                       # marker="H"
-                       )
-    plot.set_yscale("log")
-    # ax1.legend(fontsize=FONTSIZE, loc='upper left')
-    ax1.get_legend().set_visible(False)
-    ax1.set_xlabel(None)
-    ax1.set_ylabel("Throughput (tk/s)")
-    # ax1.set_ylim(0,235)
-    ax1.yaxis.set_label_position("right")
-    ax1.yaxis.tick_right()
-    ax1.set_title(f"(b) {higher_better_str}", fontsize=FONTSIZE, color="navy")
-
-    handles, labels = ax1.get_legend_handles_labels()
-    fig.legend(handles, labels,fontsize=FONTSIZE, loc='outside lower center', ncol=4)
-    #fig.tight_layout()
-    fig.get_layout_engine().set(w_pad=1/72, h_pad=2/72, hspace=0,
-                                wspace=0.1)
-    fig.savefig(os.path.join(plots_dir, f"paging.pdf"), format="pdf")
+    ax.set_ylabel("TTFT (s)")
+    ax.set_ylim(0, 235)
+    ax.set_title(f"{lower_better_str}", fontsize=FONTSIZE, color="navy")
 
 
 if __name__ == "__main__":
