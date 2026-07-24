@@ -11,46 +11,32 @@ import os
 from datetime import datetime
 
 
-def get_latest_file(directory, prefix, identifier, variant, spec, flavor):
-    latest_file = None
+def get_latest_run_dir(directory):
+    latest_dir = None
     latest_time = None
 
-    for filename in os.listdir(directory):
-        parts = filename.rsplit('_', 4)
-        if len(parts) != 5:
-            continue  # Doesn't match expected format
-
-        file_prefix, file_id, file_variant, file_spec, date_str = parts
-
-        if file_prefix != prefix or file_id != identifier or file_variant != variant or file_spec != spec:
-            continue
-
-        split = date_str.split('.')
-
-        if len(split) != 3:
-            continue  # Doesn't match expected format
-
-        # Clean date string (remove file extension if any)
-        date_str, file_flavor, file_ext = split
-
-        if file_flavor != flavor:
+    for name in os.listdir(directory):
+        if not os.path.isdir(os.path.join(directory, name)):
             continue
 
         try:
-            # Parse ISO 8601 datetime
-            dt = datetime.fromisoformat(date_str)
+            # Run dirs are named by their ISO 8601 start time
+            dt = datetime.fromisoformat(name)
         except ValueError:
-            continue  # Skip malformed dates
+            continue  # Skip non-run dirs
 
         if latest_time is None or dt > latest_time:
             latest_time = dt
-            latest_file = filename
+            latest_dir = name
 
-    return latest_file
+    if latest_dir is None:
+        raise FileNotFoundError(
+            f"No timestamped run dirs under {directory}; run `just paging` first.")
+    return os.path.join(directory, latest_dir)
 
 
 def load_data() -> pd.DataFrame:
-    eval_path = os.path.join(result_dir, "paging")
+    eval_path = get_latest_run_dir(os.path.join(result_dir, "paging"))
     dfs = []
     specs = {
         # "mmap": "mmap",
@@ -68,19 +54,11 @@ def load_data() -> pd.DataFrame:
     }
     # variants = ["16G", "2G"]
 
-    first_spec = next(iter(specs))
-    first_variant = next(iter(variants))
-
-    file = get_latest_file(eval_path, "bench", "paging", first_variant, first_spec, "out")
     for spec in specs.keys():
-        spec_file = file.replace(first_spec, spec)
-        spec_file.replace("out", "err")
         df1s = []
         for variant in variants.keys():
-            variant_file_out = spec_file.replace(first_variant, variant)
-            variant_file_err = variant_file_out.replace("out", "err")
-            variant_out_path = os.path.join(eval_path, variant_file_out)
-            variant_err_path = os.path.join(eval_path, variant_file_err)
+            variant_out_path = os.path.join(eval_path, f"bench_paging_{variant}_{spec}.out.txt")
+            variant_err_path = os.path.join(eval_path, f"bench_paging_{variant}_{spec}.err.txt")
             if os.path.exists(variant_out_path) and os.path.exists(variant_err_path):
                 with open(variant_out_path) as f_out, open(variant_err_path) as f_err:
                     table = "".join(l.replace(" ", "") for l in f_out if l.startswith("|") and not l.startswith("|-"))

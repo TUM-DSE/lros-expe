@@ -1,5 +1,0 @@
-ml initializing
-ml initialized
-model loaded
-stats loaded
-info printed

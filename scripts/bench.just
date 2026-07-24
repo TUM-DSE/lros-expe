@@ -238,7 +238,9 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 
 	set -euo pipefail
 
-	mkdir -p {{OUT_DIR}}/paging
+	# Each run lands in its own timestamped dir; the plot reads the most recent one
+	out_dir="{{OUT_DIR}}/paging/$(date -Iseconds)"
+	mkdir -p "$out_dir"
 
 	# Shared arguments (16 prompt token, 8 text gen token, 1 batch, 1 thread, no detailed integrated timings)
 	args="-npp 16 -ntg 8 -npl 1 -t 1 --no-perf"
@@ -249,24 +251,24 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 			taskset -c {{AFFINITY}} \
 			{{LLAMACPP_BIN}} $args --no-mmap \
 			-m {{MODEL}} \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_read.out.txt \
-			2> {{OUT_DIR}}/paging/bench_paging_"$m"_read.err.txt
+			2> >(tee "$out_dir"/bench_paging_"$m"_read.err.txt >&2) \
+			| tee "$out_dir"/bench_paging_"$m"_read.out.txt
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
 			{{LLAMACPP_BIN}} $args \
 			-m {{MODEL}} \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_mmap.out.txt \
-			2> {{OUT_DIR}}/paging/bench_paging_"$m"_mmap.err.txt
+			2> >(tee "$out_dir"/bench_paging_"$m"_mmap.err.txt >&2) \
+			| tee "$out_dir"/bench_paging_"$m"_mmap.out.txt
 
 		# LROS
 		just -f {{justfile()}} EVAL_ARGS="$args --no-mmap" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.out.txt \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.errout.txt \
+			"$out_dir"/bench_paging_"$m"_lrosread.out.txt \
+			"$out_dir"/bench_paging_"$m"_lrosread.errout.txt \
 			$m
 		# Fix merged output
-		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.out.txt \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosread.err.txt || test $? = 1;
+		grep "llama_perf_context_print" "$out_dir"/bench_paging_"$m"_lrosread.out.txt \
+			> "$out_dir"/bench_paging_"$m"_lrosread.err.txt || test $? = 1;
 
 		if [[ "$m" == "16G" ]]; then
 			buf_size=4096
@@ -276,12 +278,12 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 
 		just -f {{justfile()}} EVAL_ARGS="libukvmem.prefetch_size=$buf_size -- $args" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.out.txt \
-			{{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.errout.txt \
+			"$out_dir"/bench_paging_"$m"_lrosprefetch.out.txt \
+			"$out_dir"/bench_paging_"$m"_lrosprefetch.errout.txt \
 			$m
 		# Fix merged output
-		grep "llama_perf_context_print" {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.out.txt \
-			> {{OUT_DIR}}/paging/bench_paging_"$m"_lrosprefetch.err.txt || test $? = 1;
+		grep "llama_perf_context_print" "$out_dir"/bench_paging_"$m"_lrosprefetch.out.txt \
+			> "$out_dir"/bench_paging_"$m"_lrosprefetch.err.txt || test $? = 1;
 	done
 
 paging_motiv:
