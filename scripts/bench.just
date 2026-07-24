@@ -252,7 +252,7 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 			{{LLAMACPP_BIN}} $args --no-mmap \
 			-m {{MODEL}} \
 			2> >(tee "$out_dir"/bench_paging_"$m"_read.err.txt >&2) \
-			| tee "$out_dir"/bench_paging_"$m"_read.out.txt
+			| tee "$out_dir"/bench_paging_"$m"_read.out.txt || [[ $m == 2G ]]
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
 			{{LLAMACPP_BIN}} $args \
