@@ -245,17 +245,18 @@ paging: #(build "linux" "cpu") (build "lros" "cpu")
 	# Shared arguments (16 prompt token, 8 text gen token, 1 batch, 1 thread, no detailed integrated timings)
 	args="-npp 16 -ntg 8 -npl 1 -t 1 --no-perf"
 
-	for m in "16G" "2G"; do
+	for m in "16G" "2G" "1G" "512M"; do
 		# Evict the model from the page cache before each run so no config
 		# benefits from a previous run's warm cache
 		vmtouch -qe {{MODEL}}
 		# Linux process (host) — cgroup MemoryMax=$m matches the VM memory size
+		# read is OOM-killed below 16G (model does not fit): expected failure
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
 			{{LLAMACPP_BIN}} $args --no-mmap \
 			-m {{MODEL}} \
 			2> >(tee "$out_dir"/bench_paging_"$m"_read.err.txt >&2) \
-			| tee "$out_dir"/bench_paging_"$m"_read.out.txt || [[ $m == 2G ]]
+			| tee "$out_dir"/bench_paging_"$m"_read.out.txt || [[ $m != 16G ]]
 		vmtouch -qe {{MODEL}}
 		systemd-run --user --scope -p MemoryMax="$m" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \

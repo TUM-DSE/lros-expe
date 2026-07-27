@@ -39,20 +39,16 @@ def load_data() -> pd.DataFrame:
     eval_path = get_latest_run_dir(os.path.join(result_dir, "paging"))
     dfs = []
     specs = {
-        # "mmap": "mmap",
-        "prefetch": "mmap",
+        "mmap": "mmap",
         "read": "read",
-        "lrosread": "lros: read",
-        "lrosprefetch": "lros: custom",
+        "lrosprefetch": "LROS",
     }
-    # specs = ["prefetch", "mmap", "read", "lrosread", "lrosprefetch"]
-    # specs_names = ["mmap + POPULATE", "mmap", "read", "lros read", "lros mmap prefetch"]
 
     variants = {
-        "16G": "in-memory",
-        "2G": "out-of-memory"
+        "16G": "16G",
+        "2G": "2G",
+        "512M": "512M",
     }
-    # variants = ["16G", "2G"]
 
     for spec in specs.keys():
         df1s = []
@@ -94,7 +90,7 @@ def main():
     fig1, ax = plt.subplots(figsize=(figwidth_third, 1.6))
     make_ttft_plot(ax, data)
     # Extra headroom so the two legends fit above the bars at third width
-    ax.set_ylim(0, 450)
+    ax.set_ylim(0,65)
     fig1.tight_layout(pad=0.1)
     legend = fig1.legend()
     legend.remove()
@@ -110,11 +106,20 @@ def main():
     make_throughput_plot(sax2, data)
     sax2.set_title("(b) " + sax2.get_title())
 
-    fig1, ax = plt.subplots(figsize=(figwidth_half, fig_height))
+    fig1, ax = plt.subplots(figsize=(figwidth_third, 1.6))
     make_throughput_plot(ax, data)
-    ax.legend(fontsize=FONTSIZE, loc='upper right', ncol=2)
+    ax.legend(fontsize=FONTSIZE, loc='upper right', ncol=1)
     fig1.tight_layout(pad=0.1)
     fig1.savefig(os.path.join(plots_dir, f"paging-tp.pdf"), format="pdf")
+
+    fig1, ax = plt.subplots(figsize=(figwidth_third, 1.6))
+    make_throughput_plot(ax, data, log=True, labels=True)
+    ax.legend(fontsize=FONTSIZE, loc='upper right', ncol=1)
+    fig1.tight_layout(pad=0.1)
+    fig1.savefig(os.path.join(plots_dir, f"paging-tp-log.pdf"), format="pdf")
+
+    fig1 = make_throughput_broken_fig(data)
+    fig1.savefig(os.path.join(plots_dir, f"paging-tp-broken.pdf"), format="pdf")
 
     handles, labels = sax2.get_legend_handles_labels()
     fig.legend(handles, labels, fontsize=FONTSIZE, loc='outside lower center', ncol=4)
@@ -124,31 +129,79 @@ def main():
     fig.savefig(os.path.join(plots_dir, f"paging.pdf"), format="pdf")
 
 
-def make_throughput_plot(ax, data: DataFrame):
+def label_bars(ax):
+    for c in ax.containers:
+        heights = [b.get_height() for b in c]
+        ax.bar_label(c, labels=[f"{h:.2f}" if h == h else "" for h in heights],
+                     fontsize=FONTSIZE - 1, padding=1)
+
+
+def make_throughput_plot(ax, data: DataFrame, log=False, labels=False):
     plot = sns.barplot(ax=ax, data=data, x="level_1", y="S_TGt/s",
                        hue="level_0"  # , style = "level_0"
-                       , palette=palette[:4]
+                       , palette=palette[:3]
                        , zorder=-2
                        , edgecolor="black", linewidth=0.5,
                        #  hue_order = get_order('vmcache')
                        # marker="H"
                        )
-    plot.set_yscale("log")
+    if log:
+        plot.set_yscale("log")
+        # Bottom just below the smallest bar (mmap out-of-memory ~0.09),
+        # top leaves headroom for bar labels and the legend
+        ax.set_ylim(0.05, 30)
+    if labels:
+        label_bars(ax)
     # ax.legend(fontsize=FONTSIZE, loc='upper right', ncol=2)
     ax.get_legend().remove()
     ax.set_xlabel(None)
     ax.set_ylabel("Throughput (tk/s)")
-    # ax.set_ylim(0,235)
     # ax.yaxis.set_label_position("right")
     # ax.yaxis.tick_right()
     ax.set_title(f"{higher_better_str}", fontsize=FONTSIZE, color="navy")
+
+
+def make_throughput_broken_fig(data: DataFrame):
+    fig, (ax_top, ax_bot) = plt.subplots(2, 1, sharex=True,
+                                         figsize=(figwidth_third, 1.6),
+                                         height_ratios=[1, 1], layout="constrained")
+    for ax in (ax_top, ax_bot):
+        sns.barplot(ax=ax, data=data, x="level_1", y="S_TGt/s",
+                    hue="level_0"
+                    , palette=palette[:3]
+                    , zorder=-2
+                    , edgecolor="black", linewidth=0.5,
+                    )
+        ax.get_legend().remove()
+        ax.set_xlabel(None)
+        ax.set_ylabel(None)
+
+    ax_top.set_ylim(5.5)
+    ax_bot.set_ylim(0, 0.7)
+
+    # Axis break: hide the facing spines and draw diagonal break marks
+    ax_top.spines["bottom"].set_visible(False)
+    ax_bot.spines["top"].set_visible(False)
+    ax_top.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    d = 0.5
+    break_kw = dict(marker=[(-1, -d), (1, d)], markersize=5, linestyle="none",
+                    color="black", mec="black", mew=0.8, clip_on=False)
+    ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **break_kw)
+    ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **break_kw)
+
+    ax_top.legend(fontsize=FONTSIZE, loc='upper right', ncol=1)
+    ax_top.set_title(f"{higher_better_str}", fontsize=FONTSIZE, color="navy")
+    fig.supylabel("Throughput (tk/s)", fontsize=FONTSIZE)
+    # tight_layout doesn't reserve space for supylabel; constrained layout does
+    fig.get_layout_engine().set(w_pad=1 / 72, h_pad=1 / 72, hspace=0.08)
+    return fig
 
 
 def make_ttft_plot(ax, data: DataFrame):
     plot = sns.barplot(ax=ax, data=data, x="level_1", y="load_time",
                        hue="level_0"  # , style = "level_0"
                        , edgecolor="black", linewidth=0.5
-                       , palette=palette[:4]
+                       , palette=palette[:3]
                        #  hue_order = get_order('vmcache')
                        # marker="H"
                        )
@@ -158,7 +211,7 @@ def make_ttft_plot(ax, data: DataFrame):
             x.set_label("_")
     plot = sns.barplot(ax=ax, data=data, x="level_1", y="prompt_time_cum",
                        hue="level_0"  # , style = "level_0"
-                       , palette=palette[:4]
+                       , palette=palette[:3]
                        , zorder=-1
                        , edgecolor="black", linewidth=0.5,
                        #  hue_order = get_order('vmcache')
@@ -181,7 +234,7 @@ def make_ttft_plot(ax, data: DataFrame):
 
     ax.set_xlabel(None)
     ax.set_ylabel("TTFT (s)")
-    ax.set_ylim(0, 235)
+    ax.set_ylim(0, 48)
     ax.set_title(f"{lower_better_str}", fontsize=FONTSIZE, color="navy")
 
 
