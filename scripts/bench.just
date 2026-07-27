@@ -9,7 +9,7 @@ OUT_DIR := proot + "/bench/out"
 parallel_img := LROS_PATH + "/.unikraft/build-parallel/parallel_qemu-arm64"
 
 MODEL := proot + "/models/Llama-3.2-1B-Instruct-f16.gguf"
-LLAMACPP_BIN := proot + "/lros/llama.cpp-rknn/build/bin/llama-batched-bench"
+LLAMACPP_BIN := proot + "/lros/llama.cpp-rknn/build-cpu/bin/llama-batched-bench"
 
 EVAL_ARGS := "-npp 16,32 -ntg 1,128,256 -t 1 -ngl 0 --no-mmap --no-perf"
 EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 0 --no-mmap --no-perf"
@@ -346,7 +346,7 @@ perf_isolation: (build "linux" "cpu")
 
 	# Runners: emit a "total time" line the measurement harness parses.
 	run_vm() {
-		just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf"
+		just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build-cpu/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf"
 	}
 	run_process() {
 		taskset -c 4 {{LLAMACPP_BIN}} {{EVAL_ARGS_SINGLE}} -m {{MODEL}}
