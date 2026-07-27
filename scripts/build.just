@@ -9,14 +9,19 @@ build spec variant:
 				vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec | parallel )
 					variants={{lowercase(variant)}} ;;
 				all )
-					variants="vaccel vaccel-novec vacceloh vacceloh-novec cpu cpu-novec parallel" ;;
+					variants="vaccel vaccel-novec vacceloh vacceloh-novec cpu cpu-novec" ;;
 				*)
 					echo "Unknown variant {{variant}} for spec {{spec}}" >&2
 					variants="" ;;
 			esac
 
 			for v in $variants; do
-				kraft build -t bench-$v --no-configure -o .unikraft/build-$v
+				# The parallel target is not named bench-* in the Kraftfile
+				case $v in
+					parallel) t=$v ;;
+					*) t=bench-$v ;;
+				esac
+				kraft build -t $t --no-configure -o .unikraft/build-$v
 			done
 		;;
 
