@@ -4,3 +4,4 @@ VMs/
 .nix-channels
 .lesshst
 .direnv
+scripts/__pycache__

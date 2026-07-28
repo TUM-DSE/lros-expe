@@ -77,6 +77,23 @@ def setup_crc():
         return calculator.checksum
 
 
+FREEZE_HELP = (
+    "\n"
+    "############################################################\n"
+    "# FNB48 device is not responding (frozen).\n"
+    "# ACTION REQUIRED: physically disconnect the FNB48 USB\n"
+    "# device from the OrangePi, reconnect it, then re-run\n"
+    "# this script.\n"
+    "############################################################\n"
+)
+
+
+def freeze_detected(reason):
+    print(FREEZE_HELP, file=sys.stderr)
+    print(f"(reason: {reason})", file=sys.stderr)
+    sys.exit(2)
+
+
 def find_device():
     is_fnb58_or_fnb48s = False
     dev = usb.core.find(idVendor=VID, idProduct=PID_FNB48)
@@ -304,14 +321,18 @@ def main():
     time_interval = 1.0 / sps
 
     dev, is_fnb58_or_fnb48s = find_device()
-    assert dev, "Device not found"
+    if dev is None:
+        freeze_detected("FNB48 device not found on the USB bus")
     if args.verbose:
         if is_fnb58_or_fnb48s:
             print("Found FNB48S or FNB58 device", file=sys.stderr)
         else:
             print("Found FNB48 or C1 device", file=sys.stderr)
 
-    dev.reset()
+    try:
+        dev.reset()
+    except usb.core.USBError as e:
+        freeze_detected(f"could not reset device: {e}")
 
     if args.verbose:
         print("Configs:", file=sys.stderr)
@@ -385,8 +406,16 @@ def main():
 
     drainer = Drainer(ep_in)
     while not drainer.stop_now:
-        #try:
-        data = ep_in.read(size_or_buffer=64, timeout=5000)
+        try:
+            data = ep_in.read(size_or_buffer=64, timeout=5000)
+        except usb.core.USBTimeoutError:
+            if not drainer.stop_now:
+                freeze_detected("no data received from device for 5s (read timed out)")
+            break
+        except usb.core.USBError as e:
+            if not drainer.stop_now:
+                freeze_detected(f"USB error while reading: {e}")
+            break
 
         # print("".join([f"{x:02x}" for x in data]))
         if not drainer.stop_now:
@@ -394,12 +423,12 @@ def main():
 
         if time.time() >= continue_time:
             continue_time = time.time() + refresh
-            ep_out.write(b"\xaa\x83" + b"\x00" * 61 + b"\x9e")
-        #except KeyboardInterrupt:
-        #    print(
-        #        "Terminating due to the keyboard interrupt, please wait until draining is complete …", file=sys.stderr
-        #    )
-        #    stop = True
+            try:
+                ep_out.write(b"\xaa\x83" + b"\x00" * 61 + b"\x9e")
+            except usb.core.USBError as e:
+                if not drainer.stop_now:
+                    freeze_detected(f"USB error while writing: {e}")
+                break
 
 
 if __name__ == "__main__":
