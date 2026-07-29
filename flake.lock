@@ -25,11 +25,10 @@
       },
       "locked": {
         "dir": "flake",
-        "lastModified": 1784807030,
-        "narHash": "sha256-0VifA4ONWV8q69u+H+LvBEvo5B9dpkyHkQ8rpK1d0iM=",
-        "ref": "refs/heads/staging",
-        "rev": "146f03d25e32d66450219612f408773a514cbc11",
-        "revCount": 49,
+        "lastModified": 1785164163,
+        "narHash": "sha256-YcQjZX/iAF6SiEQzMfFQCXVRAikjwmfyPEJlDWkWCsk=",
+        "rev": "e76d200b3ce99c9013c56b7bf84742a5cc4eb361",
+        "revCount": 53,
         "type": "git",
         "url": "file:./lros"
       },
@@ -55,11 +54,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1759281824,
-        "narHash": "sha256-FIBE1qXv9TKvSNwst6FumyHwCRH3BlWDpfsnqRDCll0=",
+        "lastModified": 1767313136,
+        "narHash": "sha256-16KkgfdYqjaeRGBaYsNrhPRRENs0qzkQVUooNHtoy2w=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "5b5be50345d4113d04ba58c444348849f5585b4a",
+        "rev": "ac62194c3917d5f474c1a844b6fd6da2db95077d",
         "type": "github"
       },
       "original": {

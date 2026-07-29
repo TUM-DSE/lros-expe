@@ -58,7 +58,10 @@ run_lros img out out_err size_mem="16G" batch_size="1" vaccel="false" model="Lla
 run_lros_stdout img size_mem="16G" args="":
 	@just -f {{justfile()}} _qemu {{img}} "{{args}}" {{size_mem}}
 
-run_parallel size_mem="16G" batch_size="1":
+run_preemption:
 	just -f {{justfile()}} _qemu {{parallel_img}} \
-		"llama-parallel -np 2 -ns 6 --arrival-interval-ms 10000 -n 20 -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" \
-		{{size_mem}}
+		"llama-parallel -np 2 -ns 6 --arrival-interval-ms 10000 -n 20 -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 8G
+
+run_batch:
+	just -f {{justfile()}} _qemu {{parallel_img}} \
+		"llama-parallel -np 4 -ns 4 --arrival-interval-ms 10000 -n 20 -m /root/models/Llama-3.2-1B-Instruct-f16.gguf" 8G
