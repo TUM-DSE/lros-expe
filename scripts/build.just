@@ -6,7 +6,7 @@ build spec variant:
 		lros)
 			cd {{LROS_PATH}}
 			case {{lowercase(variant)}} in
-				vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec | parallel )
+				vaccel | vaccel-novec | vacceloh | vacceloh-novec | cpu | cpu-novec | parallel | cli)
 					variants={{lowercase(variant)}} ;;
 				all )
 					variants="vaccel vaccel-novec vacceloh vacceloh-novec cpu cpu-novec" ;;
@@ -18,7 +18,7 @@ build spec variant:
 			for v in $variants; do
 				# The parallel target is not named bench-* in the Kraftfile
 				case $v in
-					parallel) t=$v ;;
+					parallel | cli) t=$v ;;
 					*) t=bench-$v ;;
 				esac
 				kraft build -t $t --no-configure -o .unikraft/build-$v

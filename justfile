@@ -3,6 +3,7 @@ import "scripts/vm.just"
 import "scripts/build.just"
 import "scripts/plot.just"
 import "scripts/bench.just"
+import "scripts/demo.just"
 
 proot := justfile_directory()
 
