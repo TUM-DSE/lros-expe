@@ -11,6 +11,10 @@ paging_demo:
 		# Shared arguments (16 prompt token, 8 text gen token, 1 batch, 1 thread, no detailed integrated timings)
 		args="-npp 16 -ntg 1 -t 1 --no-perf"
 
+
+		echo "=========================="
+		echo "========Linux:read========"
+		echo "=========================="
 		# Evict the model from the page cache before each run so no config
 		# benefits from a previous run's warm cache
 		vmtouch -qe {{MODEL}}
@@ -19,7 +23,11 @@ paging_demo:
 		systemd-run --user --scope -p MemoryMax="512M" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
 			{{LLAMACPP_BIN}} $args -npl 1 --no-mmap \
-			-m {{MODEL}} || echo "Ca"
+			-m {{MODEL}} || echo "Cannot run. Model does not fit into memory."
+
+		echo "=========================="
+		echo "========Linux:mmap========"
+		echo "=========================="
 		vmtouch -qe {{MODEL}}
 		systemd-run --user --scope -p MemoryMax="512M" -p MemorySwapMax=0 --quiet -- \
 			taskset -c {{AFFINITY}} \
@@ -27,12 +35,18 @@ paging_demo:
 			-m {{MODEL}}
 
 		# LROS
+		echo "=========================="
+		echo "========LROS:read========="
+		echo "=========================="
 		vmtouch -qe {{MODEL}}
 		just -f {{justfile()}} EVAL_ARGS="$args --no-mmap" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
 			/dev/null /dev/null \
 			512M
 
+		echo "=========================="
+		echo "======LROS:prefetch======="
+		echo "=========================="
 		vmtouch -qe {{MODEL}}
 		just -f {{justfile()}} EVAL_ARGS="libukvmem.prefetch_size=64 -- $args" run_lros \
 			{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 \
