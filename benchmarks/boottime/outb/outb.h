@@ -4,5 +4,5 @@
 
 static inline long hvc_trace(unsigned long id)
 {
-    return syscall(468, id);
+    return syscall(470, id);
 }

@@ -25,7 +25,8 @@
       inherit (pkgs) lib;
       make-disk-image = import (./nix/make-disk-image.nix);
       selfpkgs = self.packages.${system};
-      kernelPackages = pkgs.linuxKernel.packages.linux_6_6;
+      # Same kernel as the VM image below.
+      kernelPackages = pkgs.linuxKernel.packages.linux_6_18;
     in {
       devShells = {
         default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } ({
@@ -49,7 +50,7 @@
             ncurses
             vmtouch
           ];
-          LINUX="${pkgs.linuxPackages_latest.kernel}";
+          LINUX="${kernelPackages.kernel}";
           shellHook = lib.optionalString (system == "aarch64-linux") ''
             export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)
           '';
@@ -77,7 +78,7 @@
     })) // (let
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      kernelPackages = pkgs.linuxPackages_latest; #pkgs.linuxKernel.packages.linux_6_6;
+      kernelPackages = pkgs.linuxKernel.packages.linux_6_18;
     in{
       nixosConfigurations = {
         linux-conf = inputs.nixpkgs.lib.nixosSystem {

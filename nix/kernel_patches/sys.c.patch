@@ -1,5 +1,4 @@
 diff --git a/kernel/sys.c b/kernel/sys.c
-index adc0de0..750b28f 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -159,6 +159,19 @@
