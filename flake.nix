@@ -27,6 +27,16 @@
       selfpkgs = self.packages.${system};
       # Same kernel as the VM image below.
       kernelPackages = pkgs.linuxKernel.packages.linux_6_18;
+      libstop = pkgs.stdenv.mkDerivation {
+        name = "libstop";
+        src = ./benchmarks/boottime;
+        buildPhase = ''
+          $CC -shared -fPIC -O2 stop.c -o libstop.so
+        '';
+        installPhase = ''
+          install -Dm755 libstop.so $out/lib/libstop.so
+        '';
+      };
     in {
       devShells = {
         default = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } ({
@@ -51,6 +61,7 @@
             vmtouch
           ];
           LINUX="${kernelPackages.kernel}";
+          LIBSTOP="${libstop}/lib/libstop.so";
           shellHook = lib.optionalString (system == "aarch64-linux") ''
             export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)
           '';
