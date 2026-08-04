@@ -133,6 +133,7 @@ in
   systemd.services."boottime-log" = {
     description = "Log boot time";
     wantedBy = [ "multi-user.target" ];
+    after = ["sshd.service"];
     # idle service is executed after all other active jobs are dispatched
     serviceConfig.Type = "idle";
     serviceConfig.ExecStart = "${outb}/bin/outb";
