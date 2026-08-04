@@ -23,7 +23,13 @@ let # this executable enables to fit the VM shell to your terminal
     IFS='[;R' read -r _ rows cols _ < /dev/tty
 
     stty "$old"
-    stty cols "$cols" rows "$rows"
+    if [ -n "$rows" ] && [ -n "$cols" ]; then
+      stty cols "$cols" rows "$rows"
+    else
+      # nothing answered the size query: not an interactive terminal
+      # (e.g. the console is captured into a file during benchmarks)
+      exit 0
+    fi
   '';
   outb = pkgs.callPackage ./outb.nix { inherit pkgs; };
 in
