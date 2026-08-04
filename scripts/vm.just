@@ -3,9 +3,22 @@
 
 qemu_ssh_port := "2222"
 
-ssh_local cmd="":
-    ssh \
+# Pass ssh_args="-t" for a pty: keeps interactive-style (line buffered)
+# output, but pollutes captured output with \r, so it is not the default.
+ssh_local cmd="" ssh_args="":
+    ssh {{ssh_args}} \
     -i {{proot}}/nix/keyfile \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o IdentityAgent=/dev/null \
+    -F /dev/null \
+    -p {{qemu_ssh_port}} \
+    root@localhost -- "{{cmd}}"
+
+ssh_local_clean cmd="" ssh_args="":
+    @ssh {{ssh_args}} \
+    -i {{proot}}/nix/keyfile \
+    -o LogLevel=ERROR \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
     -o IdentityAgent=/dev/null \

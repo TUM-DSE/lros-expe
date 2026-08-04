@@ -14,6 +14,6 @@ int main(int argc, char *argv[]) {
         value = (char)atoi(argv[1]);
     }
 
-    hvc_trace(value);
+    if (hvc_trace(value)) return 1;
     return 0;
 }

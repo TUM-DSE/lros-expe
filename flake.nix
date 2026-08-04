@@ -59,8 +59,14 @@
             stress
             ncurses
             vmtouch
+            bpftrace
           ];
-          LINUX="${kernelPackages.kernel}";
+          # The vm recipe boots this directly via -kernel: use the image's
+          # kernel, which includes the boot-event patches (trace_hvc etc.),
+          # not the plain nixpkgs one.
+          LINUX = if system == "aarch64-linux"
+            then "${self.nixosConfigurations.linux-conf.config.boot.kernelPackages.kernel}"
+            else "${kernelPackages.kernel}";
           LIBSTOP="${libstop}/lib/libstop.so";
           shellHook = lib.optionalString (system == "aarch64-linux") ''
             export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)

@@ -12,6 +12,7 @@ BEGIN {
     @EVENT[230] = "Linux: kernel_start";
     @EVENT[231] = "Linux: init_start";
     @EVENT[240] = "Linux: systemd init end";
+    @EVENT[250] = "Unikraft: init end";
 }
 
 // QEMU entry point
@@ -69,35 +70,11 @@ tracepoint:kvm:kvm_hvc_arm64 /args->imm==0x42/ {
     printf("%llu: %d %s\n", nsecs, args->r0, @EVENT[(int64)args->r0]);
 }
 
-// KVM_SET_USER_MEMORY_REGION
-tracepoint:syscalls:sys_enter_ioctl /(args->cmd)==0x4020AE46/ {
-	/*
-	struct kvm_userspace_memory_region {
-    	__u32 slot;
-    	__u32 flags;
-    	__u64 guest_phys_addr;
-    	__u64 memory_size; // bytes
-    	__u64 userspace_addr; // start of the userspace allocated memory
-    };
-	*/
-
-	// QEMU (on ARM) uses slots 0 and 1 for simulated VIRT_FLASH, 2 for the actual RAM and 3 for the pvclock
-
-	$arr = (uint64*)args->arg;
-	$arr32 = (uint32*)args->arg;
-	$slot = $arr32[0];
-	$flags = $arr32[1];
-	$guest_paddr = $arr[1];
-	$memory_size = $arr[2];
-	$addr = $arr[3];
-
-	//Only look at actual RAM mappings
-	if ($slot == 2) {
-		printf("Memory map: %llx: %lld\n", $addr, $memory_size);
-	}
-
-	//printf("%x, %x, %lx, %lx %lx %lx %lx\n", args->fd, args->cmd, args->arg, $arr[0], $arr[1], $arr[2], $arr[3]);
-}
+// The location of the guest RAM mapping (KVM_SET_USER_MEMORY_REGION, slot 2)
+// used to be traced here, but neither tracepoint:syscalls:sys_enter_ioctl
+// (CONFIG_FTRACE_SYSCALLS) nor a kprobe on __kvm_set_memory_region
+// (CONFIG_KPROBE_EVENTS) is available on the rockchip vendor kernel. The RAM
+// mapping is instead identified in /proc/<pid>/smaps as the largest mapping.
 
 END {
     clear(@);
