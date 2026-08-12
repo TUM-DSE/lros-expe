@@ -161,7 +161,7 @@ boottime_demo:
 		printf '%-8s %14s\n' "$label" "$rss" >> "$work/rss_report"
 	}
 
-	prog_vm="$({{proot}}/scripts/run_in_vm.sh lros/llama.cpp-rknn/build-cpu/bin/llama-batched-bench)"
+	prog_vm="$({{proot}}/scripts/run_in_vm.sh llama.cpp-rknn/build-cpu/bin/llama-batched-bench)"
 
 	echo "=========================="
 	echo "==========Linux==========="

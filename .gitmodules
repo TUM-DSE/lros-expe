@@ -1,13 +1,7 @@
-[submodule "llama.cpp"]
-	path = llama.cpp
-	url = git@github.com:TUM-DSE/llama.cpp.git
-[submodule "lros"]
-	path = lros
-	url = git@github.com:TUM-DSE/lros.git
-[submodule "lros-qemu"]
-	path = lros-qemu
-	url = git@github.com:TUM-DSE/lros-qemu.git
-[submodule "vaccel"]
-	path = vaccel
-	url = git@github.com:TUM-DSE/vaccel.git
-    branch = "matmul"
+[submodule "llama.cpp-rknn"]
+	path = llama.cpp-rknn
+	url = git@gitlab.lrz.de:00000000014A6BD7/llama.cpp-rknn.git
+[submodule "miniosv"]
+	path = miniosv
+	url = git@github.com:TUM-DSE/miniosv.git
+	branch = srg_mainline

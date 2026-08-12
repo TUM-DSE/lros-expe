@@ -7,7 +7,7 @@ run_vm out out_err variant="build" size_mem="16G" additional_vm_args="":
 
 	sleep 40
 
-	just ssh_local "$({{proot}}/scripts/run_in_vm.sh lros/llama.cpp-rknn/{{variant}}/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf)" \
+	just ssh_local "$({{proot}}/scripts/run_in_vm.sh llama.cpp-rknn/{{variant}}/bin/llama-batched-bench {{EVAL_ARGS}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf)" \
 		> {{out}} 2> {{out_err}} || echo "Command exited with error code $?"
 
 	sleep 5

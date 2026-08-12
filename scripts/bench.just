@@ -1,15 +1,26 @@
 import "run.just"
 
-LROS_IMAGE_NAME := "llama.cpp_qemu-arm64"
-LROS_PATH := proot + "/lros/"
+# The unikernel is miniOSv now. `make out=build/<variant>.aarch64` puts each
+# variant's image in its own directory, so LROS_IMAGE_DIR + variant names it.
+LROS_PATH := proot + "/miniosv"
+LROS_IMAGE_NAME := "loader.img"
+
+# The native llama.cpp, used for both the host-process baseline and the VM.
+LLAMACPP_RKNN_PATH := proot + "/llama.cpp-rknn"
 
 LLAMA_CPP_TARGETS := "llama-batched-bench"
 
 OUT_DIR := proot + "/bench/out"
-parallel_img := LROS_PATH + "/.unikraft/build-parallel/parallel_qemu-arm64"
+
+# llama-parallel is not among miniOSv's frontends yet -- its dispatcher carries
+# llama-cli and batched-bench only. The recipes that use this (run_preemption,
+# run_batch, bench_parallel_sweep, bench_ctx_switch) are left as they were and
+# will fail if invoked; this path is deliberately the old Unikraft one, so that
+# is obvious rather than looking like a miniOSv image that failed to build.
+parallel_img := proot + "/lros/.unikraft/build-parallel/parallel_qemu-arm64"
 
 MODEL := proot + "/models/Llama-3.2-1B-Instruct-f16.gguf"
-LLAMACPP_BIN := proot + "/lros/llama.cpp-rknn/build-cpu/bin/llama-batched-bench"
+LLAMACPP_BIN := LLAMACPP_RKNN_PATH + "/build-cpu/bin/llama-batched-bench"
 
 EVAL_ARGS := "-npp 16,32 -ntg 1,128,256 -t 1 -ngl 0 --no-mmap --no-perf"
 EVAL_ARGS_SINGLE := "-npp 16 -ntg 128 -npl 1 -t 1 -ngl 0 --no-mmap --no-perf"
@@ -126,7 +137,7 @@ bench spec variant="all" model=MODEL size_mem="10G" log_power="false" batch_size
 				esac
 
 				taskset -c {{AFFINITY}} \
-				{{proot}}/lros/llama.cpp-rknn/build-${v}/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
+				{{LLAMACPP_RKNN_PATH}}/build-${v}/bin/llama-batched-bench {{EVAL_ARGS}} -npl {{batch_size}} \
 					-m {{model}} \
 					2> >(tee {{OUT_DIR}}/bench_process_${v}_$d.err.txt >&2) \
 					| tee {{OUT_DIR}}/bench_process_${v}_$d.out.txt
@@ -200,7 +211,7 @@ bench_device_perf model=DEVICE_PERF_MODEL prompts="1,16,32,64,128,256" n_gen="16
 				out="$run_dir/host_${v}_run${run}.out.txt"
 				err="$run_dir/host_${v}_run${run}.err.txt"
 				taskset -c {{AFFINITY}} \
-					{{proot}}/lros/llama.cpp-rknn/build-${v}/bin/llama-batched-bench \
+					{{LLAMACPP_RKNN_PATH}}/build-${v}/bin/llama-batched-bench \
 					"${args[@]}" -npl 1 -m {{proot}}/models/{{model}} \
 					2> >(tee "$err" >&2) \
 					| tee "$out"
@@ -229,7 +240,7 @@ hugepage: (build "linux" "cpu") (build "linux" "cpu-thp")
 
 	perf stat -e l1d_tlb,l1d_tlb_refill,l2d_tlb,l2d_tlb_refill,dtlb_walk,l1i_tlb,l1i_tlb_refill,itlb_walk -j \
 		-o {{OUT_DIR}}/thp/perf_thp_$d.json \
-		{{proot}}/lros/llama.cpp-rknn/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{MODEL}} \
+		{{LLAMACPP_RKNN_PATH}}/build-thp/bin/llama-batched-bench {{EVAL_ARGS}} -m {{MODEL}} \
 		2> >(tee {{OUT_DIR}}/thp/bench_thp_$d.err.txt >&2) \
 		| tee {{OUT_DIR}}/thp/bench_thp_$d.out.txt
 
@@ -347,7 +358,7 @@ perf_isolation: (build "linux" "cpu")
 
 	# Runners: emit a "total time" line the measurement harness parses.
 	run_vm() {
-		just ssh_local "/root/scripts/run_in_vm.sh /root/lros/llama.cpp-rknn/build-cpu/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf"
+		just ssh_local "/root/scripts/run_in_vm.sh /root/llama.cpp-rknn/build-cpu/bin/llama-batched-bench {{EVAL_ARGS_SINGLE}} -m /root/models/Llama-3.2-1B-Instruct-f16.gguf"
 	}
 	run_process() {
 		taskset -c 4 {{LLAMACPP_BIN}} {{EVAL_ARGS_SINGLE}} -m {{MODEL}}
