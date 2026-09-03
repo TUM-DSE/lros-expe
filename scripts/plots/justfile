@@ -2,3 +2,7 @@ import? "../../justfile"
 
 micro_pow:
 	python micro_pow.py
+
+# Regenerate all mock figures (default destination: paper/plots/mock/)
+mock out_dir="":
+	python3 mock_all.py {{out_dir}}
