@@ -5,6 +5,8 @@ import "scripts/plot.just"
 import "scripts/bench.just"
 import "scripts/demo.just"
 
+mod exp 'scripts/exp/mod.just'
+
 proot := justfile_directory()
 
 models_dir := proot+"/models"

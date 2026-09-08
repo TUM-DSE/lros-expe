@@ -1,4 +1,6 @@
 #include "vaccel.h"
+#include <stdint.h>
+#include <string.h>
 #include "rknn_api.h"
 #include "rknn_matmul_api.h"
 
@@ -91,6 +93,72 @@ static int va_rknn_matmul_get_props(struct vaccel_session *sess, char *props, si
     return VACCEL_OK;
 }
 
+// The graph-level path is compiled in only when the plugin is built against a
+// ggml, which the on-target build in scripts/exp does and the flake derivation
+// (rknn.c alone) does not. Without the guard that derivation produced a shared
+// library with undefined symbols that failed at dlopen.
+#ifdef VIAI_ADAPTER_RKNN
+
+// The graph-level path. Identical in shape to the CUDA plugin's: VACCEL_OP_EXEC
+// arrives with library and fn_symbol popped and the rest untouched, and the
+// ggml server behind it drives whatever backend this plugin was built with --
+// RKNNOH here, CUDA on the Orin. See PLAN-viai.md.
+int va_ggml_probe(char *out, unsigned int out_size);
+int va_ggml_exec(uint64_t sess_id,
+		 const void **rd, const unsigned int *rd_size, unsigned int nr_rd,
+		 void **wr, const unsigned int *wr_size, unsigned int nr_wr);
+
+static int va_rknn_exec(struct vaccel_session *sess, const char *library,
+			const char *fn_symbol, struct vaccel_arg *read,
+			size_t nr_read, struct vaccel_arg *write,
+			size_t nr_write)
+{
+	(void)library;
+	const void *rd[8];
+	unsigned int rds[8];
+	void *wr[4];
+	unsigned int wrs[4];
+
+	if (!fn_symbol)
+		return VACCEL_ENOTSUP;
+	// The transport floor, same two symbols the CUDA plugin answers, so the
+	// round trip can be measured on this board too.
+	if (strcmp(fn_symbol, "ping") == 0)
+		return VACCEL_OK;
+	if (strcmp(fn_symbol, "echo") == 0) {
+		size_t n;
+		if (nr_read < 1 || nr_write < 1)
+			return VACCEL_EINVAL;
+		n = read[0].size < write[0].size ? read[0].size : write[0].size;
+		memcpy(write[0].buf, read[0].buf, n);
+		return VACCEL_OK;
+	}
+	if (strcmp(fn_symbol, "ggml_probe") == 0) {
+		if (nr_write < 1)
+			return VACCEL_EINVAL;
+		return va_ggml_probe((char *)write[0].buf, write[0].size);
+	}
+	if (strcmp(fn_symbol, "ggml") != 0)
+		return VACCEL_ENOTSUP;
+	if (nr_read > 8 || nr_write > 4)
+		return VACCEL_EINVAL;
+
+	for (size_t i = 0; i < nr_read; i++) {
+		rd[i] = read[i].buf;
+		rds[i] = read[i].size;
+	}
+	for (size_t i = 0; i < nr_write; i++) {
+		wr[i] = write[i].buf;
+		wrs[i] = write[i].size;
+	}
+	return va_ggml_exec(sess ? (uint64_t)sess->id : 0, rd, rds,
+			    (unsigned)nr_read, wr, wrs, (unsigned)nr_write) == 0 ?
+		       VACCEL_OK :
+		       VACCEL_EIO;
+}
+
+#endif /* VIAI_ADAPTER_RKNN */
+
 struct vaccel_op ops[] = {
 	VACCEL_OP_INIT(ops[0], VACCEL_OP_MATMUL_CREATE, va_rknn_matmul_create),
 	VACCEL_OP_INIT(ops[1], VACCEL_OP_CREATE_MEM, va_rknn_create_mem),
@@ -102,6 +170,9 @@ struct vaccel_op ops[] = {
 	VACCEL_OP_INIT(ops[7], VACCEL_OP_MATMUL_SET_MATRIX, va_rknn_matmul_set_matrix),
 	VACCEL_OP_INIT(ops[8], VACCEL_OP_MATMUL_GET_MATRIX, va_rknn_matmul_get_matrix),
 	VACCEL_OP_INIT(ops[9], VACCEL_OP_MATMUL_GET_PROPS, va_rknn_matmul_get_props),
+#ifdef VIAI_ADAPTER_RKNN
+	VACCEL_OP_INIT(ops[10], VACCEL_OP_EXEC, va_rknn_exec),
+#endif
 };
 
 static int init(void)

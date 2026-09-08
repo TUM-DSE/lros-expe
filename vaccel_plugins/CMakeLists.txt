@@ -1,3 +1,7 @@
+# Builds the matmul-only plugins, which is what the flake packages. The viai
+# graph server (viai_server.cpp, viai_rknn.cpp, ggml_probe.cpp) is not built
+# here: it links a ggml built on the board itself, so it is compiled by
+# scripts/exp (exp_accel_plugin) with -DVIAI_ADAPTER_RKNN instead.
 cmake_minimum_required(VERSION 3.25)
 project(plugins LANGUAGES C CXX CUDA)
 

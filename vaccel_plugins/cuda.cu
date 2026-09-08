@@ -11,6 +11,12 @@ extern "C" {
 #define debug(fmt, ...) vaccel_debug("[cuda] " fmt, ##__VA_ARGS__)
 #define error(fmt, ...) vaccel_error("[cuda] " fmt, ##__VA_ARGS__)
 
+// Defined in ggml_probe.cpp, compiled by the host compiler rather than nvcc.
+int va_ggml_probe(char *out, unsigned int out_size);
+int va_ggml_exec(uint64_t sess_id,
+                 const void **rd, const unsigned int *rd_size, unsigned int nr_rd,
+                 void **wr, const unsigned int *wr_size, unsigned int nr_wr);
+
 static inline bool check(cudaError_t err, const char *context) {
     if (err != cudaSuccess) {
         error("CUDA error at %s: %s\n", context, cudaGetErrorString(err));
@@ -221,6 +227,55 @@ static int va_cuda_matmul_get_props(struct vaccel_session *sess, char *props, si
 }
 
 
+// VACCEL_OP_EXEC reaches the plugin with library and fn_symbol popped and the
+// remaining arguments untouched, which is what carries operations vAccel core
+// has no opcode for. fn_symbol selects the operation.
+//
+// "ping"  measures the round trip: nothing is done on the host.
+// "echo"  copies read[0] into write[0], to separate the fixed cost of a round
+//         trip from its cost per byte.
+static int va_cuda_exec(struct vaccel_session *sess, const char *library,
+                        const char *fn_symbol, struct vaccel_arg *read,
+                        size_t nr_read, struct vaccel_arg *write,
+                        size_t nr_write) {
+    (void) library;
+    if (!fn_symbol) {
+        return VACCEL_EINVAL;
+    }
+    if (strcmp(fn_symbol, "ping") == 0) {
+        return VACCEL_OK;
+    }
+    if (strcmp(fn_symbol, "ggml") == 0) {
+        // The viai backend's whole protocol rides this one symbol.
+        const void *rd[8]; unsigned int rds[8];
+        void *wr[4]; unsigned int wrs[4];
+        if (nr_read > 8 || nr_write > 4) {
+            return VACCEL_EINVAL;
+        }
+        for (size_t i = 0; i < nr_read; i++)  { rd[i] = read[i].buf;  rds[i] = read[i].size; }
+        for (size_t i = 0; i < nr_write; i++) { wr[i] = write[i].buf; wrs[i] = write[i].size; }
+        return va_ggml_exec(sess ? sess->id : 0, rd, rds, (unsigned) nr_read,
+                            wr, wrs, (unsigned) nr_write) == 0 ? VACCEL_OK : VACCEL_EIO;
+    }
+    if (strcmp(fn_symbol, "ggml_probe") == 0) {
+        if (nr_write < 1) {
+            return VACCEL_EINVAL;
+        }
+        int rc = va_ggml_probe((char *) write[0].buf, write[0].size);
+        return rc;
+    }
+    if (strcmp(fn_symbol, "echo") == 0) {
+        if (nr_read < 1 || nr_write < 1) {
+            return VACCEL_EINVAL;
+        }
+        size_t n = read[0].size < write[0].size ? read[0].size : write[0].size;
+        memcpy(write[0].buf, read[0].buf, n);
+        return VACCEL_OK;
+    }
+    error("exec: unknown symbol '%s'\n", fn_symbol);
+    return VACCEL_ENOTSUP;
+}
+
 struct vaccel_op ops[] = {
     VACCEL_OP_INIT(ops[0], VACCEL_OP_MATMUL_CREATE, (void*) va_cuda_matmul_create),
     VACCEL_OP_INIT(ops[1], VACCEL_OP_CREATE_MEM, (void*) va_cuda_create_mem),
@@ -232,6 +287,7 @@ struct vaccel_op ops[] = {
     VACCEL_OP_INIT(ops[7], VACCEL_OP_MATMUL_SET_MATRIX, (void*) va_cuda_matmul_set_matrix),
     VACCEL_OP_INIT(ops[8], VACCEL_OP_MATMUL_GET_MATRIX, (void*) va_cuda_matmul_get_matrix),
     VACCEL_OP_INIT(ops[9], VACCEL_OP_MATMUL_GET_PROPS, (void*) va_cuda_matmul_get_props),
+    VACCEL_OP_INIT(ops[10], VACCEL_OP_EXEC, (void*) va_cuda_exec),
 };
 
 static int init(void) {
