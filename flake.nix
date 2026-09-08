@@ -26,14 +26,18 @@
       qemuVaccel = lros-qemu.packages.${system}.qemu-vaccel;
       rtArch = if system == "x86_64-linux" then "x86_64" else "aarch64";
 
+      # The one file and not the whole directory: with ./vaccel_plugins as src,
+      # editing a plugin source rebuilt this and moved its store path, which is
+      # how the path hardcoded in scripts/exp/targets.sh went stale.
       librknnrt = pkgs.stdenv.mkDerivation {
         pname = "librknnrt";
         version = "unknown";
-        src = ./vaccel_plugins;
+        src = ./vaccel_plugins/librknnrt.so;
         nativeBuildInputs = [ pkgs.autoPatchelfHook ];
         buildInputs = [ pkgs.stdenv.cc.cc.lib ];
+        dontUnpack = true;
         dontBuild = true;
-        installPhase = "install -Dm755 librknnrt.so $out/lib/librknnrt.so";
+        installPhase = "install -Dm755 $src $out/lib/librknnrt.so";
       };
 
       vaccel-plugin-rknn = pkgs.stdenv.mkDerivation {
@@ -72,6 +76,32 @@
         VACCEL_PLUGINS_RKNN = lib.optionalString (system == "aarch64-linux")
           "${vaccel-plugin-rknn}/lib/libvaccel-rknn.so";
         VACCEL_PLUGINS_CUDA = "";
+      };
+
+      # CUDA is unfree, so it needs its own import rather than legacyPackages.
+      # 12.6 and not the default: the Orin's driver is the JetPack one, and a
+      # binary built against a newer toolkit fails at load.
+      cuda = (import nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      }).cudaPackages_12_6;
+
+      # Everything vaccel_plugins/build-plugin.sh reads, so that it carries no
+      # store paths of its own and the two boards get theirs from this lock.
+      # getDev/getLib rather than .dev/.lib: the CUDA packages have split those
+      # outputs in some nixpkgs revisions and not others.
+      pluginShellEnv = {
+        VACCEL_PREFIX = "${vaccel}";
+      };
+      cudaShellEnv = {
+        CUDART = "${lib.getLib cuda.cuda_cudart}/lib";
+        CUBLAS = "${lib.getLib cuda.libcublas}/lib";
+        CUDA_DEV_INCLUDE = lib.concatStringsSep " " [
+          "-I${lib.getDev cuda.cuda_cudart}/include"
+          "-I${lib.getDev cuda.libcublas}/include"
+          "-I${lib.getDev cuda.cuda_cccl}/include"
+        ];
+        CUDA_ARCH = "87";
       };
     in {
       devShells = {
@@ -112,6 +142,30 @@
             export CONF=$(nix eval --raw .#nixosConfigurations.linux-conf.config.system.build.toplevel)
           '';
         } // pluginEnv // firmware);
+      } // lib.optionalAttrs (system == "aarch64-linux") {
+        # The environment vaccel_plugins/build.sh runs build-plugin.sh in, one
+        # per board, so neither script carries a store path. Separate shells
+        # because they share a system: pulling CUDA into the RK3588's shell
+        # would download a toolkit it has no use for.
+        plugin-rk3588 = pkgs.mkShell ({
+          name = "lros-plugin-rk3588";
+          buildInputs = [ vaccel librknnrt pkgs.cmake pkgs.ninja ];
+          PLATFORM = "rk3588";
+          RKNN = "${librknnrt}";
+        } // pluginShellEnv);
+
+        # gcc13, because nvcc 12.6 rejects anything newer with a host_config.h
+        # version check, and that is what broke the link when the ggml stage's
+        # toolchain reached it.
+        plugin-orin = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; } ({
+          name = "lros-plugin-orin";
+          buildInputs = [ vaccel pkgs.cmake pkgs.ninja cuda.cuda_nvcc cuda.cudatoolkit ];
+          PLATFORM = "orin";
+          CUDAToolkit_ROOT = "${cuda.cudatoolkit}";
+          # nvcc resolves its own symlink and looks for headers beside the real
+          # binary, which in the joined toolkit has no cuda_runtime.h.
+          NVCC_PREPEND_FLAGS = "-I${cuda.cudatoolkit}/include";
+        } // pluginShellEnv // cudaShellEnv);
       };
     } // lib.optionalAttrs (system == "aarch64-linux") {
       packages =
