@@ -1,35 +1,26 @@
 #!/usr/bin/env bash
-# Builds the plugin QEMU's acceldev backend dlopens, on the board it will run
-# on: it links against that board's vAccel, its accelerator runtime (librknnrt,
-# CUDA) and a ggml built here from the guest's own llama.cpp tree.
+# Builds the plugin QEMU's acceldev backend dlopens: rknn.c or cuda.cu plus the
+# VIAI server, linked against the board's vAccel, its accelerator runtime and a
+# ggml built here from the guest's llama.cpp tree. That tree and not
+# llama.cpp-rknn, because the VIAI wire format embeds raw ggml_type and ggml_op
+# values, so the two sides have to come from the same source.
 #
-# That tree and not llama.cpp-rknn: the VIAI wire format embeds raw ggml_type
-# and ggml_op values, so the two sides have to come from the same source.
+# Runs on the board, configured entirely from the environment: PLATFORM, REPO,
+# SCRATCH, VACCEL_PREFIX, then RKNN (rk3588) or CUDART, CUBLAS, CUDA_DEV_INCLUDE
+# and CUDA_ARCH (orin), plus NIX_CACHE_OPT. build.sh sets those for a board you
+# are logged into; lib.sh's exp_accel_plugin sets them over ssh.
 #
-# Runs on the target, out of the checkout there. lib.sh's exp_accel_plugin
-# ships this directory and calls it; it is equally runnable by hand on a board,
-# which is the point of it being a script rather than a quoted string:
+#   build-plugin.sh [ggml|link|all]     default all
 #
-#   PLATFORM=rk3588 REPO=$PWD SCRATCH=/var/tmp/lros \
-#   VACCEL_PREFIX=/nix/store/...-vaccel-0.7.1 RKNN=/nix/store/...-librknnrt \
-#       vaccel_plugins/build-plugin.sh
-#
-# Inputs, all from the environment:
-#   PLATFORM        rk3588 | orin
-#   REPO            this checkout on the target
-#   SCRATCH         the plugin is written to $SCRATCH/plugin
-#   VACCEL_PREFIX   vAccel install, or VA as targets.sh names it
-#   RKNN            librknnrt install                          (rk3588)
-#   CUDART CUBLAS CUDA_DEV_INCLUDE CUDA_ARCH                   (orin)
-#   NIX_CACHE_OPT   extra nix options for the nvcc shell, may be empty
+# Separate stages because they need different environments: a toolchain new
+# enough to build ggml puts a gcc on PATH that nvcc refuses.
 set -euo pipefail
 
 : "${PLATFORM:?set PLATFORM to rk3588 or orin}"
 : "${REPO:?set REPO to the checkout on this machine}"
 : "${SCRATCH:?set SCRATCH to the scratch directory on this machine}"
 
-VACCEL_PREFIX="${VACCEL_PREFIX:-${VA:-}}"
-[ -n "$VACCEL_PREFIX" ] || { echo "no vAccel install: set VACCEL_PREFIX or VA" >&2; exit 1; }
+VACCEL_PREFIX="${VACCEL_PREFIX:-${VA:-}}"   # checked in link_plugin; ggml needs none
 
 GG="$REPO/miniosv/app/llama.cpp"     # the guest's tree, deliberately
 GGB="$GG/build-plugin"               # ggml for the plugin, kept apart from the guest build
@@ -114,12 +105,22 @@ link_orin() {
            -lvaccel -lcublas -lcudart -lggml -lggml-base
 }
 
-mkdir -p "$OUT"
-build_ggml
-say "link the plugin for $PLATFORM"
-case "$PLATFORM" in
-    rk3588) link_rk3588 ;;
-    orin)   link_orin ;;
-    *)      echo "no accelerator plugin for platform '$PLATFORM'" >&2; exit 1 ;;
+link_plugin() {
+    [ -n "$VACCEL_PREFIX" ] || {
+        echo "no vAccel install: set VACCEL_PREFIX or VA" >&2; exit 1; }
+    mkdir -p "$OUT"
+    say "link the plugin for $PLATFORM"
+    case "$PLATFORM" in
+        rk3588) link_rk3588 ;;
+        orin)   link_orin ;;
+        *)      echo "no accelerator plugin for platform '$PLATFORM'" >&2; exit 1 ;;
+    esac
+    say "plugin in $OUT"
+}
+
+case "${1:-all}" in
+    ggml) build_ggml ;;
+    link) link_plugin ;;
+    all)  build_ggml; link_plugin ;;
+    *)    echo "usage: $0 [ggml|link|all]" >&2; exit 1 ;;
 esac
-say "plugin in $OUT"
