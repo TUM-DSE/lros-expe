@@ -51,7 +51,7 @@ build spec variant:
 				# the native baselines use.
 				nix develop {{LROS_PATH}} --command \
 					make -C {{LROS_PATH}} -j"$(nproc)" \
-						app=llama arch=aarch64 \
+						app=app/llama.cpp arch=aarch64 \
 						out=build/$v.aarch64 \
 						conf_vaccel=$conf_vaccel \
 						conf_llama_sgemm=$conf_sgemm
