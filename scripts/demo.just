@@ -86,14 +86,17 @@ boottime_demo:
 		if [ -e "$wrapped" ]; then echo "$wrapped"; else echo "$p"; fi
 	}
 
-	# Attach the boot probes, then boot the VM with libstop preloaded and its
-	# stdin on a pipe: qemu stops before dying so we can read its memory stats.
+	# Attach the boot probes, then boot the VM with its stdin on a pipe: with
+	# libstop preloaded (the caller's job) qemu stops before dying so we can
+	# read its memory stats. Only qemu may get the preload: libstop parks
+	# whichever preloaded process exits first, so a helper process exiting
+	# before qemu would steal the exit stop.
 	start_trace() { # name qemu-binary launch-cmd...
 		name=$1 qemu_real=$2; shift 2
 		# setsid: op5 configures sudo with use_pty, which puts our controlling
 		# terminal into raw mode for as long as bpftrace runs (staircased
 		# output). In its own session sudo has no terminal to touch.
-		setsid sudo "$(command -v bpftrace)" "$bt_script" "$qemu_real" \
+		setsid sudo "$(command -v bpftrace)" "$bt_script" "$qemu_real" "$LIBSTOP" \
 			> "$work/$name.bt" 2> "$work/$name.bt.err" &
 		bt_pid=$!
 		until grep -q "Attaching" "$work/$name.bt" 2>/dev/null; do
@@ -109,7 +112,7 @@ boottime_demo:
 		# Strip the cursor position query from the console output: the guest's
 		# resize login script probes the terminal for its size, and the answer
 		# our terminal sends would end up as stray input.
-		LD_PRELOAD=$LIBSTOP "$@" < "$work/$name.stdin" \
+		"$@" < "$work/$name.stdin" \
 			> >(sed -u $'s/\x1b\\[6n//g') 2>&1 &
 		vm_pid=$!
 		exec 3> "$work/$name.stdin"
@@ -166,7 +169,10 @@ boottime_demo:
 	echo "=========================="
 	echo "==========Linux==========="
 	echo "=========================="
-	start_trace linux "$(resolve_qemu qemu-kvm)" just vm 1 2G big
+	# Preloading the whole just-vm chain is fine here: qemu is the first
+	# process in it to exit, so the exit stop is guaranteed to catch it.
+	start_trace linux "$(resolve_qemu qemu-kvm)" \
+		env LD_PRELOAD=$LIBSTOP just vm 1 2G big
 	#	for ((i = 0; i < 60; i++)); do
 	#		just ssh_local_clean true 2>/dev/null && break
 	#		sleep 2
@@ -188,11 +194,17 @@ boottime_demo:
 	echo "=========================="
 	echo "==========LROS============"
 	echo "=========================="
-	# batched-bench without arguments exits right after boot
+	# batched-bench --version exits right after boot. run.py boots the image
+	# through AAVMF, so the Kernel column includes the firmware; --preload
+	# keeps libstop out of run.py's helper subprocesses (stty exits before
+	# qemu even starts and would otherwise take the stop).
 	start_trace lros "$(resolve_qemu qemu-system-aarch64)" \
-		just -f {{justfile()}} run_lros_stdout \
-		{{LROS_PATH}}/.unikraft/build-cpu/bench-cpu_qemu-arm64 2G "llama-batched-bench --version"
-	finish_trace "LROS" "250 Unikraft: init end" ""
+		taskset -c {{AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
+		--arch aarch64 -p kvm -c 1 -m 2G --nogdb \
+		--preload "$LIBSTOP" \
+		--image-path {{LROS_PATH}}/build/cpu.aarch64/{{LROS_IMAGE_NAME}} \
+		--args "batched-bench --version"
+	finish_trace "LROS" "269 miniOSv: Total time" ""
 
 	echo "=========================="
 	echo "=========================="
