@@ -4,8 +4,9 @@ import "scripts/build.just"
 import "scripts/plot.just"
 import "scripts/bench.just"
 import "scripts/demo.just"
+import "scripts/unikernel_micro.just"
 
-mod exp 'scripts/exp/mod.just'
+#mod exp 'scripts/exp/mod.just'
 
 proot := justfile_directory()
 

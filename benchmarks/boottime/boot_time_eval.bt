@@ -13,6 +13,18 @@ BEGIN {
     @EVENT[231] = "Linux: init_start";
     @EVENT[240] = "Linux: systemd init end";
     @EVENT[250] = "Unikraft: init end";
+    // 260 + boot_time_chart event index (see miniosv core/chart.cc). The
+    // auto-numbered labels mirror the guest's call order for the aarch64
+    // virt config; a mismatch shows up as an incomplete trace, not as a
+    // silently wrong number.
+    @EVENT[260] = "miniOSv: premain";
+    @EVENT[263] = "miniOSv: TLS initialization";
+    @EVENT[264] = "miniOSv: .init functions";
+    @EVENT[265] = "miniOSv: SMP launched";
+    @EVENT[266] = "miniOSv: pci enumerated";
+    @EVENT[267] = "miniOSv: drivers probe";
+    @EVENT[268] = "miniOSv: drivers loaded";
+    @EVENT[269] = "miniOSv: Total time";
 }
 
 // QEMU entry point
@@ -20,7 +32,7 @@ u:$1:main {
     printf("%llu: QEMU: main\n", nsecs);
 }
 
-ur:$1:main {
+u:$2:shutdown{
     printf("%llu: QEMU: exit\n", nsecs);
     @ = 0;
 }
