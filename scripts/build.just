@@ -61,7 +61,7 @@ build spec variant:
 		linux-vm | vm | linux | process)
 			[ -x "$(command -v cmake)" ] && cd {{LLAMACPP_RKNN_PATH}}
 			case {{lowercase(variant)}} in
-				cpu | cpu-novec | cuda | rknn | rknnoh | cpu-thp )
+				cpu | cpu-clang | cpu-novec | cuda | rknn | rknnoh | cpu-thp )
 					variants={{lowercase(variant)}} ;;
 				all )
 					variants="cpu cpu-novec cpu-thp cuda rknn rknnoh" ;;
