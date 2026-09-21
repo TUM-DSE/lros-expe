@@ -170,7 +170,7 @@ boottime n_runs="5" size_mem="2G" variant="cpu" configs="linux lros":
 		# (prints its usage and exits). stdbuf: without a pty the guest side
 		# would block-buffer stdout and only show it in one piece at the end
 		# (env runs the LD_LIBRARY_PATH= prefix without a shell)
-		just ssh_local_clean "stdbuf -oL env $prog_vm" \
+		just ssh_local_clean "stdbuf -oL env $prog_vm -m /not/existing" \
 			> "$out_dir/$name.bench" 2>&1 || true
 		just ssh_local_clean poweroff 2>/dev/null || true
 		finish_trace linux $1 "" "231 Linux: init_start" "240 Linux: systemd init end"
@@ -185,7 +185,7 @@ boottime n_runs="5" size_mem="2G" variant="cpu" configs="linux lros":
 			taskset -c {{AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
 			--arch aarch64 -p kvm -c 1 -m {{size_mem}} --nogdb \
 			--preload "$LIBSTOP" \
-			--image-path "$img" --args "batched-bench --version"
+			--image-path "$img" --args "batched-bench -m /not/existing"
 		finish_trace lros $1 "260 miniOSv: premain" "269 miniOSv: Total time" ""
 	}
 
