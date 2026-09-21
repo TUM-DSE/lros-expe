@@ -16,10 +16,20 @@ run_vm out out_err variant="build" size_mem="16G" additional_vm_args="":
 
 	sleep 10
 
+
+_qemu img append model size="16G" vaccel="false":
+	taskset -c {{AFFINITY}} miniosv/scripts/run.py \
+		--image-path {{img}} \
+		-m {{size}} \
+		--emulated-nvme {{model}} \
+		{{ if vaccel == "true" { "--vaccel" } else { "" } }} \
+		--args "{{ append }}"
+
+
 # Shared QEMU launcher for the unikraft images (bench + parallel).
 # Silenced so callers that capture stdout (e.g. run_lros_stdout) stay clean.
 # Pass vaccel="true" to attach the vAccel host backend + virtio-accel device.
-_qemu img append size="16G" vaccel="false":
+_qemu1 img append size="16G" vaccel="false":
 	@taskset -c {{AFFINITY}} qemu-system-aarch64 \
 		-kernel {{img}} \
 		-append "{{append}}" \
@@ -56,7 +66,7 @@ run_lros img out out_err size_mem="16G" batch_size="1" vaccel="false" model="Lla
 	fi
 
 run_lros_stdout img size_mem="16G" args="":
-	@just -f {{justfile()}} _qemu {{img}} "{{args}}" {{size_mem}}
+	just -f {{justfile()}} _qemu {{img}} "{{args}}" {{MODEL}}  {{size_mem}}
 
 run_preemption:
 	just -f {{justfile()}} _qemu {{parallel_img}} \
