@@ -49,6 +49,11 @@
         meta.platforms = [ "aarch64-linux" ];
       };
 
+      clangOnly = pkgs.runCommand "clang-only" { } ''
+        mkdir -p $out/bin
+        ln -s ${pkgs.clang}/bin/clang ${pkgs.clang}/bin/clang++ $out/bin/
+      '';
+
       libstop = pkgs.stdenv.mkDerivation {
         name = "libstop";
         src = ./benchmarks/boottime;
@@ -101,6 +106,7 @@
           [
             qemuVaccel
             vaccel
+            clangOnly
             cmake
             ninja
             pkg-config
@@ -146,6 +152,7 @@
           PLATFORM = "orin";
           CUDAToolkit_ROOT = "${cuda.cudatoolkit}";
           NVCC_PREPEND_FLAGS = "-I${cuda.cudatoolkit}/include";
+          NVCC_APPEND_FLAGS = "-L${cuda.cuda_cudart.static}/lib";
         } // pluginShellEnv // cudaShellEnv);
       };
     } // lib.optionalAttrs (system == "aarch64-linux") {
