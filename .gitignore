@@ -6,3 +6,6 @@ VMs/
 .direnv
 scripts/__pycache__
 results
+
+# The KV swap area image and host state file that `just kvswap_sweep` writes.
+bench/kvswap/
