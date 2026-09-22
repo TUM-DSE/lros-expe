@@ -326,12 +326,22 @@ def parse_out_dir(default=None, description=None):
     return os.path.realpath(args.out_dir)
 
 
-def save(fig, name, directory=None):
-    """Write `name` (a bare file name) into `directory`, creating it if needed."""
+def save(fig, name, directory=None, png=False):
+    """Write `name` (a bare file name) into `directory`, creating it if needed.
+
+    With png=True a .png rendering (400 dpi) is written next to it, for a
+    quick look outside the paper.
+    """
     out_dir = directory or mock_dir
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, name)
-    fig.savefig(path, bbox_inches='tight', pad_inches=0.012)
+    paths = [path]
+    if png:
+        paths.append(os.path.splitext(path)[0] + ".png")
+    for p in paths:
+        fig.savefig(p, bbox_inches='tight', pad_inches=0.012, dpi=400)
+        # a destination outside the repo relativises into a wall of "..", so
+        # report whichever spelling is shorter
+        print("Saved " + min(p, os.path.relpath(p, os.getcwd()), key=len))
     plt.close(fig)
-    print("Saved " + min(path, os.path.relpath(path, os.getcwd()), key=len))
     return path
