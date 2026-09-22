@@ -109,6 +109,10 @@
             clangOnly
             cmake
             ninja
+            # clang for the cpu-clang llama.cpp presets (`just build linux
+            # cpu-clang`), the same major as the miniosv flake builds the
+            # guest with, so both sides of a comparison use one compiler.
+            llvmPackages_20.clang
             pkg-config
             nix
             ack

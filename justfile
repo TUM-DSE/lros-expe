@@ -4,6 +4,8 @@ import "scripts/build.just"
 import "scripts/common.just"
 import "scripts/demo.just"
 import "scripts/unikernel_micro.just"
+import "scripts/plot.just"
+import "scripts/kvswap.just"
 
 mod boards 'scripts/boards.just'
 mod motivation 'scripts/motivation.just'
