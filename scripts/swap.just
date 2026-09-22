@@ -65,7 +65,9 @@ SWAP_EMMC_MODELS_DIR := models_dir
 SWAP_MODELS := "Llama-3.2-1B-Instruct-f16.gguf Llama-3.2-1B-Instruct-Q4_K_M.gguf qwen2.5-1.5b-instruct-fp16.gguf"
 
 SWAP_DISKS := "nvme emmc"
-SWAP_CONFIGS := "linux-mmap lros-128K lros-2M lros-128K-nopin lros-2M-nopin"
+# The -nopin arms are left out of the default: they add nothing over the
+# pinned ones (measured 2026-09-17); the recipe still accepts them by name.
+SWAP_CONFIGS := "linux-mmap lros-128K lros-2M"
 SWAP_QUOTAS := "110 80 50 10"
 SWAP_INFLIGHT := "16M"
 SWAP_LINUX_MARGIN := "64M"
