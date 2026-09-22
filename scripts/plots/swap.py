@@ -10,11 +10,12 @@ per paging configuration (llama.cpp mmap on Linux, the LROS prefetcher with
 
 With no CSV the newest bench/out/swap/<timestamp>/swap.csv is used. Several
 CSVs are pooled; each bar is the median over repeated runs, with error bars
-from the runs' minimum to maximum. One figure per model: mem-weights-tp.pdf, or
-mem-weights-tp_<model>.pdf when the data holds more than one model, written to
-bench/plots/swap/ unless -o says otherwise, as PDF and PNG. Each comes in two
-widths: one column per disk panel, and, in the single-column/ subfolder, all
-panels fitted into one column.
+from the runs' minimum to maximum. The figure comes in four layouts per model,
+under bench/plots/swap/mem-weights-tp/<model>/ unless -o says otherwise, as
+PDF and PNG:
+  mem-weights-tp.pdf                        both disks, one column per panel
+  single-column/mem-weights-tp.pdf          both disks fitted into one column
+  single-column/mem-weights-tp_<disk>.pdf   one disk alone, one column
 """
 import glob
 import sys
@@ -25,6 +26,9 @@ from common import *
 # sizes differ by hatch; the -nopin arms (--pin-percent 0, S3-FIFO over the
 # whole cache instead of a pinned 75% prefix) take a lighter LROS shade.
 NOPIN_COLOR = lighten(LROS_COLOR, 0.45)
+# Configurations left out of the figures even when the data has them: the
+# no-pin arms add nothing over the pinned ones. --configs overrides this.
+HIDDEN_CONFIGS = {"lros-128K-nopin", "lros-2M-nopin"}
 CONFIG_STYLE = {
     "linux-mmap": ("mmap", {}),
     "lros-4K": ("prefetch", {"label": "LROS (prefetch, 4K)", "hatch": ".."}),
@@ -81,13 +85,15 @@ def load(paths, metric, ntg):
         ntg = int(df["tg"].max())
         print(f"no rows with ntg={ntg}; using ntg={ntg}", file=sys.stderr)
     df = df[df["tg"] == ntg].copy()
+    df = df[~df["config"].isin(HIDDEN_CONFIGS)]
     df["budget"] = df["quota_pct"] / 100.0
     return df
 
 
-def plot_model(df, model, metric, out_dir, only_configs=None, single_column=False):
-    disks = [d for d in DISK_ORDER if d in set(df["disk"])] + \
-            sorted(set(df["disk"]) - set(DISK_ORDER))
+def plot_model(df, disks, metric, out_dir, name, only_configs=None, single_column=False):
+    """One figure with a panel per disk in `disks`, saved as `name` in
+    `out_dir`; single_column fits the panels into one column width."""
+    df = df[df["disk"].isin(disks)]
     configs = [c for c in CONFIG_ORDER if c in set(df["config"])] + \
               sorted(set(df["config"]) - set(CONFIG_ORDER))
     if only_configs:
@@ -168,8 +174,7 @@ def plot_model(df, model, metric, out_dir, only_configs=None, single_column=Fals
         ax.grid(True, axis="y", linestyle="--", linewidth=0.4, alpha=0.35, zorder=0)
         ax.set_axisbelow(True)
         thin_spines(ax)
-        if len(disks) > 1:
-            ax.set_title(DISK_LABEL.get(disk, disk), fontsize=FONTSIZE_TITLE, pad=2)
+        ax.set_title(DISK_LABEL.get(disk, disk), fontsize=FONTSIZE_TITLE, pad=2)
 
     if single_column:
         # One label under both panels; per-panel labels would collide.
@@ -180,15 +185,14 @@ def plot_model(df, model, metric, out_dir, only_configs=None, single_column=Fals
     better_hint(axes[0], higher=True, xy=(0.03, 0.86))
 
     handles, labels = axes[0].get_legend_handles_labels()
+    # One row across a wide figure; a column holds three entries per row.
     fig.legend(handles, labels, loc="lower center",
                bbox_to_anchor=(0.5, 1.0 if len(disks) == 1 else 0.98),
-               ncol=len(labels), fontsize=FONTSIZE_LEGEND, frameon=False,
+               ncol=min(3, len(labels)) if single_column else len(labels),
+               fontsize=FONTSIZE_LEGEND, frameon=False,
                handlelength=1.4, handleheight=0.8, columnspacing=1.2, handletextpad=0.4)
     fig.tight_layout(pad=0.1)
-
-    stem = os.path.splitext(model)[0]
-    name = f"mem-weights-tp_{stem}.pdf" if multi_model else "mem-weights-tp.pdf"
-    save(fig, name, out_dir, png=True)
+    save(fig, name + ".pdf", out_dir, png=True)
 
 
 args = parse_args()
@@ -198,11 +202,19 @@ data = load(paths, args.metric, args.ntg)
 if data.empty:
     sys.exit("no usable rows (status ok with the requested metric)")
 models = sorted(data["model"].unique())
-multi_model = len(models) > 1
 only = args.configs.split(",") if args.configs else None
-# Two variants of every figure: one column per disk panel, and all panels
-# squeezed into a single column width (in the single-column/ subfolder).
+# Four layouts of the figure per model, under mem-weights-tp/<model>/: both
+# disks side by side at one column per panel, both fitted into one column,
+# and each disk alone in one column (the last two in single-column/).
+FIGURE = "mem-weights-tp"
 for m in models:
-    plot_model(data[data["model"] == m], m, args.metric, out_dir, only_configs=only)
-    plot_model(data[data["model"] == m], m, args.metric,
-               os.path.join(out_dir, "single-column"), only_configs=only, single_column=True)
+    sub = data[data["model"] == m]
+    disks = [d for d in DISK_ORDER if d in set(sub["disk"])] + \
+            sorted(set(sub["disk"]) - set(DISK_ORDER))
+    model_dir = os.path.join(out_dir, FIGURE, os.path.splitext(m)[0])
+    column_dir = os.path.join(model_dir, "single-column")
+    plot_model(sub, disks, args.metric, model_dir, FIGURE, only_configs=only)
+    if len(disks) > 1:
+        plot_model(sub, disks, args.metric, column_dir, FIGURE, only_configs=only, single_column=True)
+    for d in disks:
+        plot_model(sub, [d], args.metric, column_dir, f"{FIGURE}_{d}", only_configs=only, single_column=True)
