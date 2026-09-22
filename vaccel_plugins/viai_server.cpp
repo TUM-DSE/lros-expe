@@ -25,16 +25,91 @@ extern "C" bool viai_rknn_supports(const ggml_tensor *op);
 extern "C" bool viai_rknn_node(ggml_tensor *node);
 #endif
 
+#include <chrono>
+#include <climits>
 #include <cinttypes>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+// The device, lent to one graph at a time. Graphs wait in priority order,
+// lower first and then in arrival order. The holder gives the device back
+// between segments when a better graph is waiting, and resumes where it
+// stopped: what it has computed stays in its own buffers, so parking it saves
+// nothing and allocates nothing.
+class device_lease {
+public:
+    // Blocks until the device is this graph's. The ticket keeps a parked graph
+    // ahead of the ones of its priority that arrived after it.
+    void take(int32_t prio, uint64_t ticket) {
+        std::unique_lock<std::mutex> l(m);
+        const key k{prio, ticket};
+        waiting.insert(k);
+        cv.wait(l, [&] { return !busy && *waiting.begin() == k; });
+        waiting.erase(k);
+        busy = true;
+    }
+    void give_back() {
+        std::lock_guard<std::mutex> l(m);
+        busy = false;
+        cv.notify_all();
+    }
+    bool better_waiting(int32_t prio) {
+        std::lock_guard<std::mutex> l(m);
+        return !waiting.empty() && waiting.begin()->first < prio;
+    }
+    uint64_t ticket() {
+        std::lock_guard<std::mutex> l(m);
+        return next_ticket++;
+    }
+
+private:
+    using key = std::pair<int32_t, uint64_t>;
+    std::mutex m;
+    std::condition_variable cv;
+    bool busy = false;
+    uint64_t next_ticket = 0;
+    std::set<key> waiting;
+};
+
+static device_lease lease;
+
+// Held by a command that synchronises the whole device (clear, free, init), which
+// CUDA refuses during another stream's graph capture. It goes first among the
+// waiters and is short.
+struct device_hold {
+    device_hold() { lease.take(INT32_MIN, lease.ticket()); }
+    ~device_hold() { lease.give_back(); }
+};
+
+// VIAI_PREEMPT=0 runs every graph whole, first come first served, as a host
+// without the lease would.
+static bool viai_preempt() {
+    static const bool on = [] {
+        const char *e = getenv("VIAI_PREEMPT");
+        return !e || atoi(e) != 0;
+    }();
+    return on;
+}
+
+// VIAI_SEGMENT_MIN_TOKENS: the smallest batch whose graph is split at layers,
+// default 2, so that a decode step runs whole and is preempted only between
+// steps. A graph that does not say its batch size is split.
+static int32_t viai_segment_min_tokens() {
+    static const int32_t n = [] {
+        const char *e = getenv("VIAI_SEGMENT_MIN_TOKENS");
+        return e ? atoi(e) : 2;
+    }();
+    return n;
+}
 
 class viai_server {
 public:
@@ -54,7 +129,10 @@ public:
     bool supports_op(const viai_msg_supports_op_req & request, viai_msg_supports_op_rsp & response);
     bool get_tensor(const viai_msg_get_tensor_req & request, void * out);
     bool copy_tensor(const viai_msg_copy_tensor_req & request, viai_msg_copy_tensor_rsp & response);
-    bool graph_compute(const std::vector<uint8_t> & input, viai_msg_graph_compute_rsp & response);
+    // Called with the server lock held; releases it once the graph is built,
+    // so that other requests are served while the graph runs.
+    bool graph_compute(const std::vector<uint8_t> & input, viai_msg_graph_compute_rsp & response,
+                       std::unique_lock<std::mutex> & lock);
     bool init_tensor(const viai_msg_init_tensor_req & request);
     bool get_alloc_size(const viai_msg_get_alloc_size_req & request, viai_msg_get_alloc_size_rsp & response);
 
@@ -357,9 +435,9 @@ ggml_tensor * viai_server::create_node(uint64_t id,
     return result;
 }
 
-bool viai_server::graph_compute(const std::vector<uint8_t> & input, viai_msg_graph_compute_rsp & response) {
-    // serialization format:
-    // | n_nodes (4 bytes) | nodes (n_nodes * sizeof(uint64_t) | n_tensors (4 bytes) | tensors (n_tensors * sizeof(viai_tensor)) |
+bool viai_server::graph_compute(const std::vector<uint8_t> & input, viai_msg_graph_compute_rsp & response,
+                                std::unique_lock<std::mutex> & lock) {
+    // serialization format: see VIAI_CMD_RT_SUBMIT in viai-proto.h
     if (input.size() < sizeof(uint32_t)) {
         return false;
     }
@@ -377,7 +455,18 @@ bool viai_server::graph_compute(const std::vector<uint8_t> & input, viai_msg_gra
     const viai_tensor * tensors = (const viai_tensor *)(input.data() + sizeof(n_nodes) + n_nodes*sizeof(uint64_t) + sizeof(n_tensors));
     GGML_PRINT_DEBUG("[%s] n_nodes: %u, n_tensors: %u\n", __func__, n_nodes, n_tensors);
 
-    size_t buf_size = ggml_tensor_overhead()*(n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
+    const size_t graph_bytes = sizeof(uint32_t) + n_nodes*sizeof(uint64_t) + sizeof(uint32_t) + n_tensors*sizeof(viai_tensor);
+    int32_t prio = VIAI_PRIO_DEFAULT;
+    if (input.size() >= graph_bytes + sizeof(prio)) {
+        memcpy(&prio, input.data() + graph_bytes, sizeof(prio));
+    }
+    int32_t n_tokens = 0;
+    if (input.size() >= graph_bytes + sizeof(prio) + sizeof(n_tokens)) {
+        memcpy(&n_tokens, input.data() + graph_bytes + sizeof(prio), sizeof(n_tokens));
+    }
+
+    // Room for the graph and for one segment of it.
+    size_t buf_size = ggml_tensor_overhead()*(n_nodes + n_tensors) + 2*ggml_graph_overhead_custom(n_nodes, false);
     struct ggml_init_params params = {
         /*.mem_size   =*/ buf_size,
         /*.mem_buffer =*/ NULL,
@@ -406,22 +495,73 @@ bool viai_server::graph_compute(const std::vector<uint8_t> & input, viai_msg_gra
             return false;
         }
     }
-#ifdef VIAI_ADAPTER_RKNN
-    // Submit boundaries, so a fault can be placed between nodes of one graph or
-    // between two graphs. Everything here is flushed: a fault in the plugin
-    // takes QEMU down and buffered output is lost.
-    ggml_status status = GGML_STATUS_SUCCESS;
+    // The graph is built and refers only to buffers the guest owns; running it
+    // touches no server state, so the next request need not wait for it.
+    lock.unlock();
+
+    // Segment boundaries: after each node, on RKNN, which runs node by node
+    // anyway; after each layer's output otherwise, where the only value live
+    // across the boundary is the residual stream, and only for a batch of at
+    // least viai_segment_min_tokens(). A graph without layers is one segment.
+    std::vector<uint32_t> ends;
+#ifndef VIAI_ADAPTER_RKNN
+    const bool by_layer = n_tokens == 0 || n_tokens >= viai_segment_min_tokens();
+#endif
     for (uint32_t i = 0; i < n_nodes; i++) {
-        if (!viai_rknn_node(graph->nodes[i])) {
-            GGML_LOG_ERROR("[%s] node %u (%s) failed on the device\n", __func__, i,
-                           ggml_op_name(graph->nodes[i]->op));
-            status = GGML_STATUS_FAILED;
-            break;
+#ifdef VIAI_ADAPTER_RKNN
+        ends.push_back(i + 1);
+#else
+        if (by_layer && strncmp(graph->nodes[i]->name, "l_out-", 6) == 0) {
+            ends.push_back(i + 1);
+        }
+#endif
+    }
+    if (ends.empty() || ends.back() != n_nodes) {
+        ends.push_back(n_nodes);
+    }
+    const bool preempt = viai_preempt();
+    if (!preempt) {
+        ends.assign(1, n_nodes);   // whole, as before the lease
+        prio = VIAI_PRIO_DEFAULT;  // and first come, first served
+    }
+
+    struct ggml_cgraph * seg = ggml_new_graph_custom(ctx, n_nodes, false);
+    const uint64_t ticket = lease.ticket();
+    lease.take(prio, ticket);
+    ggml_status status = GGML_STATUS_SUCCESS;
+    uint32_t begin = 0;
+    uint32_t n_parked = 0;
+    for (size_t s = 0; s < ends.size() && status == GGML_STATUS_SUCCESS; s++) {
+#ifdef VIAI_ADAPTER_RKNN
+        for (uint32_t i = begin; i < ends[s]; i++) {
+            if (!viai_rknn_node(graph->nodes[i])) {
+                GGML_LOG_ERROR("[%s] node %u (%s) failed on the device\n", __func__, i,
+                               ggml_op_name(graph->nodes[i]->op));
+                status = GGML_STATUS_FAILED;
+                break;
+            }
+        }
+#else
+        if (begin == 0 && ends[s] == n_nodes) {
+            status = ggml_backend_graph_compute(backend, graph);
+        } else {
+            seg->n_nodes = ends[s] - begin;
+            memcpy(seg->nodes, graph->nodes + begin, seg->n_nodes * sizeof(ggml_tensor *));
+            status = ggml_backend_graph_compute(backend, seg);
+        }
+#endif
+        begin = ends[s];
+        if (preempt && begin < n_nodes && lease.better_waiting(prio)) {
+            lease.give_back();
+            n_parked++;
+            lease.take(prio, ticket);
         }
     }
-#else
-    ggml_status status = ggml_backend_graph_compute(backend, graph);
-#endif
+    lease.give_back();
+    if (n_parked && getenv("VIAI_STATS")) {
+        fprintf(stderr, "viai: priority %d graph of %u nodes, %d tokens, parked %u time(s)\n",
+                prio, n_nodes, n_tokens, n_parked);
+    }
     response.result = status;
     ggml_free(ctx);
     return true;
@@ -615,7 +755,7 @@ extern "C" int va_ggml_exec(uint64_t sess_id,
     }
 
 
-    std::lock_guard<std::mutex> lock(viai_mutex);
+    std::unique_lock<std::mutex> lock(viai_mutex);
     viai_server *srv = viai_server_for(sess_id);
     if (!srv) {
         return 1;
@@ -667,10 +807,12 @@ extern "C" int va_ggml_exec(uint64_t sess_id,
                                     *(viai_msg_buffer_get_base_rsp *) out) ? 0 : 1;
     }
     case VIAI_CMD_MEM_FREE: {
+        device_hold hold;
         NEED_HDR(viai_msg_free_buffer_req);
         return srv->free_buffer(*(const viai_msg_free_buffer_req *) hdr) ? 0 : 1;
     }
     case VIAI_CMD_MEM_CLEAR: {
+        device_hold hold;
         NEED_HDR(viai_msg_buffer_clear_req);
         return srv->buffer_clear(*(const viai_msg_buffer_clear_req *) hdr) ? 0 : 1;
     }
@@ -701,7 +843,7 @@ extern "C" int va_ggml_exec(uint64_t sess_id,
         NEED_OUT(viai_msg_graph_compute_rsp);
         std::vector<uint8_t> input((const uint8_t *) hdr,
                                    (const uint8_t *) hdr + hdr_size);
-        return srv->graph_compute(input, *(viai_msg_graph_compute_rsp *) out) ? 0 : 1;
+        return srv->graph_compute(input, *(viai_msg_graph_compute_rsp *) out, lock) ? 0 : 1;
     }
     case VIAI_CMD_GET_DEVICE_MEMORY: {
         NEED_OUT(viai_msg_get_device_memory_rsp);
@@ -724,6 +866,7 @@ extern "C" int va_ggml_exec(uint64_t sess_id,
         return 0;
     }
     case VIAI_CMD_RT_INIT_TENSOR: {
+        device_hold hold;
         NEED_HDR(viai_msg_init_tensor_req);
         return srv->init_tensor(*(const viai_msg_init_tensor_req *) hdr) ? 0 : 1;
     }

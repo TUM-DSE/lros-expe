@@ -5,3 +5,4 @@ VMs/
 .lesshst
 .direnv
 scripts/__pycache__
+results

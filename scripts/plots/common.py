@@ -1,17 +1,10 @@
-# Shared plotting style for the LROS paper.
-#
-# Adapted from the memsafedb plot style (TUM-DSE/memsafedb, plots/common.py):
-# Libertine serif text, a fixed colour+hatch identity per system, black bar
-# edges, percentage annotations against the baseline and a blue
-# "lower/higher is better" hint inside every axes.
-#
-# The LaTeX text pipeline is used only when a `latex` binary is actually
-# available; otherwise matplotlib's own mathtext renders the same strings, so
-# the scripts produce identical-looking output on machines without texlive.
-# Force either mode with PLOT_USETEX=1 / PLOT_USETEX=0.
+# Shared plotting style for the LROS paper: Libertine text, a colour and hatch
+# per system, and a blue "lower/higher is better" hint. LaTeX renders the text
+# when a latex binary exists (force with PLOT_USETEX=1/0), mathtext otherwise.
 import argparse
 import os
 import shutil
+import sys
 
 # workaround to select Agg as backend consistenly
 import matplotlib as mpl  # type: ignore
@@ -25,18 +18,13 @@ import pandas as pd
 import numpy as np
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-result_dir = os.path.join(dir_path, "../../bench/out/")
-plots_dir = os.path.join(dir_path, "../../bench/plots")
-# Mock figures go straight into the paper tree, where the .tex includes them.
 paper_plots_dir = os.path.realpath(os.path.join(dir_path, "../../../paper/plots"))
 mock_dir = os.path.join(paper_plots_dir, "mock")
 
 # 3.3 inch for single column, 7 inch for double column
-figwidth_column_third = 1
 figwidth_third = 2
 figwidth_half = 3.3
 figwidth_full = 7
-figwidth_full_thesis = 5.8
 fig_height = 2
 FONTSIZE = 7
 
@@ -48,7 +36,6 @@ FONTSIZE_TITLE = FONTSIZE - 1
 FONTSIZE_ANNOTATION = FONTSIZE - 2
 
 palette = sns.color_palette("pastel")
-# sns.set(rc={"figure.figsize": (5, 5)})
 sns.set_style("whitegrid")
 sns.set_style("ticks", {"xtick.major.size": FONTSIZE, "ytick.major.size": FONTSIZE})
 sns.set_context("paper", rc={"font.size": FONTSIZE, "axes.titlesize": FONTSIZE, "axes.labelsize": FONTSIZE,
@@ -90,9 +77,7 @@ else:
     })
 
 
-# ---------------------------------------------------------------------------
-# text helpers that keep the same source string valid in both text pipelines
-# ---------------------------------------------------------------------------
+# --- text, valid in both pipelines ------------------------------------------
 
 def bf(text: str) -> str:
     """Bold `text`; under usetex the markup has to be explicit."""
@@ -119,12 +104,9 @@ def _arrow(name: str) -> str:
 lower_better_str = "Lower is better " + _arrow("downarrow")
 higher_better_str = "Higher is better " + _arrow("uparrow")
 left_better_str = "Lower is better " + _arrow("leftarrow")
-right_better_str = "Higher is better " + _arrow("rightarrow")
 
 
-# ---------------------------------------------------------------------------
-# colours
-# ---------------------------------------------------------------------------
+# --- colours ------------------------------------------------------------------
 
 def darken(color):
     hue, saturation, value = rgb_to_hsv(to_rgb(color))
@@ -149,26 +131,6 @@ hatch_def = [
     "\\\\",
 ]
 
-marker_def = [
-    "o",
-    "x",
-    "D",
-    "*",
-    "+",
-]
-
-baseline_hatch = hatch_def[0]
-sys_hatch = hatch_def[1]
-competitor1_hatch = hatch_def[2]
-competitor2_hatch = hatch_def[3]
-competitor3_hatch = hatch_def[4]
-
-baseline_color = palette[0]
-sys_color = palette[1]
-competitor1_color = palette[2]
-competitor2_color = palette[3]
-competitor3_color = palette[4]
-
 # Qualitative base colours (ColorBrewer Set1/Paired), one hue per role.
 LROS_COLOR = '#1F78B4'          # blue  -- our system, everywhere
 LINUX_COLOR = '#9E9E9E'         # grey  -- unmodified llama.cpp on Linux
@@ -184,14 +146,14 @@ NATIVE_HATCH = '..'
 ALT_HATCH = '\\\\'
 ALT2_HATCH = '++'
 
-# One entry per series that appears anywhere in the evaluation. Keys are the
-# short identifiers used by the plot scripts; `label` is what the reader sees.
+# One entry per series the plots use: its colour, hatch, label and marker.
 style_map = {
     # end-to-end comparison
     'linux':      {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'Linux', 'marker': 'o'},
     'lros':       {'color': LROS_COLOR,  'hatch': LROS_HATCH,  'label': 'LROS',  'marker': 'D'},
     # accelerator integration
     'cpu':        {'color': CPU_COLOR,    'hatch': CPU_HATCH,    'label': 'CPU-only', 'marker': 'x'},
+    'lros-cpu':   {'color': CPU_COLOR,    'hatch': CPU_HATCH,    'label': 'LROS (CPU)', 'marker': 'x'},
     'viai':       {'color': LROS_COLOR,   'hatch': LROS_HATCH,   'label': 'LROS (VIAI)', 'marker': 'D'},
     'native':     {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Native host', 'marker': '^'},
     # model loading / weight paging
@@ -207,6 +169,27 @@ style_map = {
     'concurrent': {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': 'Concurrent', 'marker': 's'},
     'hybrid':     {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'CPU+Acc. hybrid', 'marker': '^'},
     'adaptive':   {'color': LROS_COLOR,  'hatch': LROS_HATCH,  'label': 'LROS', 'marker': 'D'},
+    # motivation: the two phases, wherever they are separated
+    'prefill':    {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': 'Prefill', 'marker': 's'},
+    'decode':     {'color': LROS_COLOR,  'hatch': LROS_HATCH,  'label': 'Decode', 'marker': 'D'},
+    'faults':     {'color': ALT2_COLOR,  'hatch': ALT2_HATCH,  'label': 'Major faults', 'marker': 'v'},
+    # motivation: switch-or-wait
+    'switch':     {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': 'Switch now', 'marker': 's'},
+    'wait':       {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'Wait', 'marker': 'o'},
+    # motivation: preemption granularity
+    'engine':     {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'llama-server', 'marker': 'o'},
+    'fair':       {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': 'llama-server + fair share', 'marker': 'D'},
+    'separate':   {'color': CPU_COLOR,   'hatch': CPU_HATCH,   'label': 'Two processes (kernel)', 'marker': '^'},
+    'stopped':    {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Kernel + priority', 'marker': 'v'},
+    'prio':       {'color': ALT2_COLOR,  'hatch': ALT2_HATCH,  'label': 'Engine + priority', 'marker': 'P'},
+    # motivation: paging and the one budget
+    'madv-seq':   {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': 'mmap + MADV_SEQUENTIAL', 'marker': 's'},
+    'madv-rand':  {'color': ALT2_COLOR,  'hatch': ALT2_HATCH,  'label': 'mmap + MADV_RANDOM', 'marker': 'P'},
+    'read-buf':   {'color': CPU_COLOR,   'hatch': CPU_HATCH,   'label': 'read into a buffer', 'marker': 'x'},
+    'npu':        {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'NPU-resident copy', 'marker': '^'},
+    # motivation: an arrival into a running batch
+    'alone':      {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Alone', 'marker': '^'},
+    'gate':       {'color': LROS_COLOR,   'hatch': LROS_HATCH,   'label': 'Engine + held-out batch', 'marker': 'D'},
 }
 
 
@@ -224,9 +207,7 @@ def legend_handles(keys: List[str]):
     return handles, [style_for(k)['label'] for k in keys]
 
 
-# ---------------------------------------------------------------------------
-# axis helpers
-# ---------------------------------------------------------------------------
+# --- axes -------------------------------------------------------------------
 
 def format_big_numbers(x, pos=None):
     if x >= 1e9:
@@ -239,21 +220,11 @@ def format_big_numbers(x, pos=None):
         return f'{x:.0f}'
 
 
-def format_big_numbers_tweaked(x, pos=None):
-    if x >= 1e9:
-        return f'{x / 1e9:.0f}B'
-    elif x >= 1e6:
-        return f'{x / 1e6:.0f}M'
-    elif x >= 1e3:
-        return f'{x / 1e6:.1f}M'
-    else:
-        return f'{x:.0f}'
-
-
-def better_hint(ax, higher: bool = False, xy=(0.02, 0.90)):
-    """The blue in-axes hint telling the reader which direction is good."""
+def better_hint(ax, higher: bool = False, xy=(0.0, 1.02)):
+    """The blue hint above the axes telling which direction is good."""
     ax.annotate(higher_better_str if higher else lower_better_str,
                 color='blue', xy=xy, xycoords='axes fraction',
+                va='bottom', annotation_clip=False,
                 fontsize=FONTSIZE_ANNOTATION)
 
 
@@ -274,14 +245,9 @@ def thin_spines(ax, hide=('top', 'right')):
 def grouped_bars(ax, categories, series, values, errors=None, baseline=None,
                  width_total=0.8, annotate=True, annotate_fmt='pct',
                  annotate_series=None, annotate_invert=False):
-    """Grouped bar chart in the paper's style.
-
-    `series` are style_map keys, `values[key]` a sequence over `categories`.
-    When `baseline` names one of the series, every other bar gets a relative
-    difference label placed above the taller of the two bars it compares;
-    `annotate_series` narrows that to the series that carry the message.
-    Returns the x positions of the groups.
-    """
+    """Grouped bars of `values[key]` over `categories`, one series per style
+    key; against `baseline`, the others labelled with their relative difference
+    (only `annotate_series` if given). Returns the group positions."""
     x = np.arange(len(categories), dtype=float)
     width = width_total / len(series)
     offsets = {}
@@ -312,8 +278,6 @@ def grouped_bars(ax, categories, series, values, errors=None, baseline=None,
                 if annotate_fmt == 'pct':
                     text = pct_label((vals[k] - base[k]) / base[k] * 100)
                 else:
-                    # `annotate_invert` for metrics where smaller is better, so
-                    # the factor still reads as an improvement
                     ratio = base[k] / vals[k] if annotate_invert else vals[k] / base[k]
                     text = speedup_label(ratio)
                 ax.text(x[k] + (offsets[key] + offsets[baseline]) / 2, top * 1.04,
@@ -335,13 +299,24 @@ def cdf(values):
     return xs, ys
 
 
-def parse_out_dir(default=None, description=None):
-    """Where the calling script should write its figures.
+# --- output -------------------------------------------------------------------
 
-    Taken from the first positional argument, else $PLOT_OUT_DIR, else the
-    paper's mock figure folder. Unknown arguments are ignored so a driver can
-    pass its own flags through to several scripts at once.
-    """
+PLATFORM_LABEL = {'orin': 'Jetson Orin', 'rk3588': 'RK3588'}
+
+
+def save_path(fig, path):
+    """Write to an explicit file path."""
+    path = os.path.realpath(path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path, bbox_inches='tight', pad_inches=0.012)
+    plt.close(fig)
+    print("Saved " + min(path, os.path.relpath(path, os.getcwd()), key=len))
+    return path
+
+
+def parse_out_dir(default=None, description=None):
+    """The first positional argument, else $PLOT_OUT_DIR, else the paper's mock
+    folder; unknown arguments are ignored so a driver can pass its own."""
     fallback = default or os.environ.get("PLOT_OUT_DIR") or mock_dir
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("out_dir", nargs="?", default=fallback,
@@ -358,7 +333,5 @@ def save(fig, name, directory=None):
     path = os.path.join(out_dir, name)
     fig.savefig(path, bbox_inches='tight', pad_inches=0.012)
     plt.close(fig)
-    # a destination outside the repo relativises into a wall of "..", so
-    # report whichever spelling is shorter
     print("Saved " + min(path, os.path.relpath(path, os.getcwd()), key=len))
     return path

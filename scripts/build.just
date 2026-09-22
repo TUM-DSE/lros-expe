@@ -1,9 +1,5 @@
-# Builds the three configurations. `lros` is the unikernel (miniOSv with
-# llama.cpp linked in); `linux`/`process`/`vm` are the native llama.cpp used as
-# the baseline, built from the llama.cpp-rknn checkout with its own presets.
-#
-# Not standalone: relies on LROS_PATH, LLAMACPP_RKNN_PATH and LLAMA_CPP_TARGETS
-# from the importing justfile.
+# Builds `lros` (miniOSv with llama.cpp) or the native llama.cpp baseline
+# (`linux`/`process`/`vm`); uses the paths in common.just.
 
 build spec variant:
 	#!/usr/bin/env bash
@@ -38,17 +34,8 @@ build spec variant:
 					*)       conf_sgemm=1 ;;
 				esac
 
-				# Each variant gets its own $(out), which the miniOSv Makefile
-				# documents as the way to build variants side by side. It is not
-				# just convenience: changing a -D flag in a .mk file does not
-				# invalidate the objects already built with the old one, so
-				# sharing one output directory across variants would silently
-				# link, say, the CPU image against vAccel-compiled objects.
-				#
-				# `nix develop` on the submodule, not this repo's shell: miniOSv
-				# builds with a self-contained LLVM toolchain (clang/lld/
-				# llvm-libc/libc++) that must not be mixed with the gcc13 stdenv
-				# the native baselines use.
+				# One out directory per variant, since a changed flag does not
+				# rebuild old objects; miniOSv's own shell, for its LLVM toolchain.
 				nix develop {{LROS_PATH}} --command \
 					make -C {{LROS_PATH}} -j"$(nproc)" \
 						app=app/llama.cpp arch=aarch64 \

@@ -1,11 +1,9 @@
 #! /usr/bin/env nix
 #! nix shell nixpkgs#patchelf --command bash
 
-# Runs on the host and prints the command that runs the given binary (path
-# relative to the repo root, which the VM mounts at /root) inside the VM.
-# The binary's rpath is remapped to the 9p-mounted host store. The loader has
-# to be resolvable by the guest, so it is taken from the guest's system
-# closure ($CONF): the host built it, and the guest has the same store paths.
+# Prints the command that runs a binary (relative to the repo root, which the
+# VM mounts at /root) inside the VM, its rpath remapped to the 9p host store
+# and its loader taken from the guest's system closure ($CONF).
 
 bin=$1; shift
 

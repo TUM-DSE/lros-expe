@@ -86,11 +86,8 @@ boottime_demo:
 		if [ -e "$wrapped" ]; then echo "$wrapped"; else echo "$p"; fi
 	}
 
-	# Attach the boot probes, then boot the VM with its stdin on a pipe: with
-	# libstop preloaded (the caller's job) qemu stops before dying so we can
-	# read its memory stats. Only qemu may get the preload: libstop parks
-	# whichever preloaded process exits first, so a helper process exiting
-	# before qemu would steal the exit stop.
+	# Boot probes attached, stdin on a pipe; libstop (preloaded into qemu only)
+	# stops it before it exits so its memory stats can be read.
 	start_trace() { # name qemu-binary launch-cmd...
 		name=$1 qemu_real=$2; shift 2
 		# setsid: op5 configures sudo with use_pty, which puts our controlling
@@ -173,12 +170,7 @@ boottime_demo:
 	# process in it to exit, so the exit stop is guaranteed to catch it.
 	start_trace linux "$(resolve_qemu qemu-kvm)" \
 		env LD_PRELOAD=$LIBSTOP just vm 1 2G big
-	#	for ((i = 0; i < 60; i++)); do
-	#		just ssh_local_clean true 2>/dev/null && break
-	#		sleep 2
-	#	done
-	# sshd accepts connections before systemd is done: wait for the boot-end
-	# event itself before shutting the VM down again
+	# sshd answers before systemd is done: wait for the boot-end event itself.
 	for ((i = 0; i < 200; i++)); do
 		grep -q "systemd init end" "$work/linux.bt" && break
 		sleep 0.2

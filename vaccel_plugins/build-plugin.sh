@@ -73,7 +73,7 @@ build_ggml() {
 # links the ggml built above.
 link_rk3588() {
     : "${RKNN:?set RKNN to the librknnrt install}"
-    cc -c -fPIC -O2 -o "$GGB/va-rknn.o" "$PLUGINS/rknn.c" \
+    cc -c -fPIC -O2 -DVIAI_ADAPTER_RKNN -o "$GGB/va-rknn.o" "$PLUGINS/rknn.c" \
         -I "$PLUGINS" -I "$VACCEL_PREFIX/include"
     c++ -shared -fPIC -O2 -DVIAI_ADAPTER_RKNN \
         -o "$OUT/libvaccel-rknn.so" \

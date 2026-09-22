@@ -1,12 +1,14 @@
 import "scripts/deps.just"
 import "scripts/vm.just"
 import "scripts/build.just"
-import "scripts/plot.just"
-import "scripts/bench.just"
+import "scripts/common.just"
 import "scripts/demo.just"
 import "scripts/unikernel_micro.just"
 
-#mod exp 'scripts/exp/mod.just'
+mod boards 'scripts/boards.just'
+mod motivation 'scripts/motivation.just'
+mod accel 'scripts/accel.just'
+mod sched 'scripts/sched.just'
 
 proot := justfile_directory()
 
