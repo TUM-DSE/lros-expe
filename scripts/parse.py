@@ -19,6 +19,11 @@ RE_DONE_SLOT = re.compile(
 RE_STARTED = re.compile(
     r"\[t=\s*[\d.]+ s\] req\s+(?P<id>\d+) STARTED\s+seq\s+\d+ prio (?P<prio>\d+), "
     r"waited [\d.]+ s, task (?P<task>\d+) on (?P<cores>\d+) core\(s\)")
+# The QoS tail both engines append to their DONE line for a trace with apps.
+RE_QOS = re.compile(
+    r"tpot\s+(?P<tpot>[\d.]+) ms p95\s+(?P<tpot_p95>[\d.]+) ms max\s+(?P<tpot_max>[\d.]+) ms, "
+    r"late (?P<late>\d+)/(?P<gaps>\d+), app (?P<app>\S+) sess (?P<sess>-?\d+) turn (?P<turn>\d+), "
+    r"e2e\s+(?P<e2e>[\d.]+) s, deadline (?P<deadline>\w+)")
 RE_BENCH = re.compile(
     r"^\|\s*(?P<pp>\d+)\s*\|\s*(?P<tg>\d+)\s*\|\s*(?P<b>\d+)\s*\|\s*(?P<nkv>\d+)\s*"
     r"\|\s*(?P<t_pp>[\d.]+)\s*\|\s*(?P<s_pp>[\d.]+)\s*\|\s*(?P<t_tg>[\d.]+)\s*"
@@ -53,8 +58,37 @@ def bench(text):
     return [",".join(m[k] for k in keys) for m in RE_BENCH.finditer(text)]
 
 
+# A row per finished request of a trace with apps: the `requests` columns,
+# then the QoS tail of the DONE line. Either engine's DONE line carries it.
+APPS_HEADER = ("req,prio,task,cores_at_start,t_done_s,prompt,gen,secs,tps,waited_s,ttft_s,"
+               "app,sess,turn,tpot_ms,tpot_p95_ms,tpot_max_ms,late,gaps,e2e_s,deadline")
+
+
+def apps(text):
+    rows = []
+    started = {int(m["id"]): m for m in RE_STARTED.finditer(text)}
+    for line in text.splitlines():
+        q = RE_QOS.search(line)
+        if not q:
+            continue
+        m = RE_DONE_SLOT.search(line)
+        if m:
+            head = (m["id"], m["prio"], -1, -1)
+        else:
+            m = RE_DONE.search(line)
+            if not m:
+                continue
+            s = started.get(int(m["id"]))
+            head = (m["id"], s["prio"] if s else -1, s["task"] if s else -1, s["cores"] if s else -1)
+        rows.append(head + (m["t"], m["prompt"], m["gen"], m["secs"], m["tps"], m["waited"],
+                            m["ttft"] or -1, q["app"], q["sess"], q["turn"], q["tpot"],
+                            q["tpot_p95"], q["tpot_max"], q["late"], q["gaps"], q["e2e"],
+                            q["deadline"]))
+    return [",".join(str(v) for v in r) for r in rows]
+
+
 if __name__ == "__main__":
-    modes = {"serve": serve, "requests": requests, "bench": bench}
+    modes = {"serve": serve, "requests": requests, "bench": bench, "apps": apps}
     if len(sys.argv) != 3 or sys.argv[1] not in modes:
         sys.exit(__doc__.strip())
     with open(sys.argv[2], "rb") as f:
