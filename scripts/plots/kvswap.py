@@ -69,6 +69,11 @@ CONFIG_ORDER = list(CONFIG_STYLE)
 HIDDEN_CONFIGS = {"lros-4K"}
 DISK_LABEL = {"nvme": "NVMe", "emmc": "eMMC"}
 DISK_ORDER = ["nvme", "emmc"]
+# The raw logs live in bench/out/kvswap/<timestamp>/ and the figures in
+# bench/plots/kvswap/; common.py no longer names either folder, dir_path is
+# this file's directory.
+result_dir = os.path.join(dir_path, "../../bench/out")
+plots_dir = os.path.join(dir_path, "../../bench/plots")
 kvswap_plots_dir = os.path.join(plots_dir, "kvswap")
 
 
