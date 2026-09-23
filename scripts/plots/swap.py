@@ -44,8 +44,11 @@ METRIC_LABEL = {"s_tg": "Decode throughput (tok/s)",
                 "s_pp": "Prefill throughput (tok/s)",
                 "s": "Throughput (tok/s)"}
 QUOTA_LABEL = "Memory quota (% of model size)"
-# The sweep's figures get their own folder in the plots dir, apart from the
-# raw logs in bench/out/swap/<timestamp>/.
+# The sweep's figures get their own folder in bench/plots, apart from the
+# raw logs in bench/out/swap/<timestamp>/. (common.py no longer names either
+# folder; dir_path is this file's directory.)
+result_dir = os.path.join(dir_path, "../../bench/out")
+plots_dir = os.path.join(dir_path, "../../bench/plots")
 swap_plots_dir = os.path.join(plots_dir, "swap")
 
 
