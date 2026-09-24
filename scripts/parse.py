@@ -23,7 +23,7 @@ RE_STARTED = re.compile(
 RE_QOS = re.compile(
     r"tpot\s+(?P<tpot>[\d.]+) ms p95\s+(?P<tpot_p95>[\d.]+) ms max\s+(?P<tpot_max>[\d.]+) ms, "
     r"late (?P<late>\d+)/(?P<gaps>\d+), app (?P<app>\S+) sess (?P<sess>-?\d+) turn (?P<turn>\d+), "
-    r"e2e\s+(?P<e2e>[\d.]+) s, deadline (?P<deadline>\w+)")
+    r"e2e\s+(?P<e2e>[\d.]+) s, deadline (?P<deadline>\w+)(?:, buffer\s+(?P<buffer>[\d.]+) ms)?")
 RE_BENCH = re.compile(
     r"^\|\s*(?P<pp>\d+)\s*\|\s*(?P<tg>\d+)\s*\|\s*(?P<b>\d+)\s*\|\s*(?P<nkv>\d+)\s*"
     r"\|\s*(?P<t_pp>[\d.]+)\s*\|\s*(?P<s_pp>[\d.]+)\s*\|\s*(?P<t_tg>[\d.]+)\s*"
@@ -60,8 +60,10 @@ def bench(text):
 
 # A row per finished request of a trace with apps: the `requests` columns,
 # then the QoS tail of the DONE line. Either engine's DONE line carries it.
+# buffer_ms: the start delay a display fed at the app's target rate would have
+# needed to never stall (0: production always ahead); empty in older logs.
 APPS_HEADER = ("req,prio,task,cores_at_start,t_done_s,prompt,gen,secs,tps,waited_s,ttft_s,"
-               "app,sess,turn,tpot_ms,tpot_p95_ms,tpot_max_ms,late,gaps,e2e_s,deadline")
+               "app,sess,turn,tpot_ms,tpot_p95_ms,tpot_max_ms,late,gaps,e2e_s,deadline,buffer_ms")
 
 
 def apps(text):
@@ -83,7 +85,7 @@ def apps(text):
         rows.append(head + (m["t"], m["prompt"], m["gen"], m["secs"], m["tps"], m["waited"],
                             m["ttft"] or -1, q["app"], q["sess"], q["turn"], q["tpot"],
                             q["tpot_p95"], q["tpot_max"], q["late"], q["gaps"], q["e2e"],
-                            q["deadline"]))
+                            q["deadline"], q["buffer"] if q["buffer"] is not None else ""))
     return [",".join(str(v) for v in r) for r in rows]
 
 

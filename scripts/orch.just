@@ -100,7 +100,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 		  "context": { "n_seq_per_task": 8, "n_ctx_per_seq": 512, "warm": 1 },
 		  "preemption": { "in_iteration": true },
 		  "memory": { $budget "kv_evict": "swap" },
-		  "qos": { "adaptive": $3, "ema": 0.3, "low": 0.7, "step_tokens": 4, "hold_background": true },
+		  "qos": { "adaptive": $3, "backlog_low": 2.0, "backlog_high": 8.0, "step_tokens": 4, "hold_background": true, "hold_margin": 2.0 },
 		  "sessions": { "idle_kv": "keep" }
 		}
 		EOF
@@ -144,9 +144,12 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 			*) echo "unknown mem $mem" >&2; exit 1 ;;
 		esac
 	for arm in {{arms}}; do
+		# The slot engines compute on ggml's own threadpool, which the guest
+		# leaves on one core unless it is pinned: one thread per core, strict.
+		pin="-C f --cpu-strict 1 -Cb f --cpu-strict-batch 1"
 		case "$arm" in
-			slots-fifo)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --fifo -np {{ORCH_SLOTS}}" ;;
-			slots-prio)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --chunk {{ORCH_CHUNK}} -np {{ORCH_SLOTS}}" ;;
+			slots-fifo)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --fifo -np {{ORCH_SLOTS}} $pin" ;;
+			slots-prio)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --chunk {{ORCH_CHUNK}} -np {{ORCH_SLOTS}} $pin" ;;
 			lros-fixed)    serve="lros-serve -m nvme:2 --models $models $trace --mode lros --policy /root/policies/fixed-$suffix.json" ;;
 			lros-adaptive) serve="lros-serve -m nvme:2 --models $models $trace --mode lros --policy /root/policies/adaptive-$suffix.json" ;;
 			*) echo "unknown arm $arm" >&2; exit 1 ;;

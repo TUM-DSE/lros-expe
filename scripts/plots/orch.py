@@ -60,6 +60,9 @@ def summarise(df):
             mem=mem, arm=arm, run=run,
             chat_tpot=chat.tpot_ms.mean(), chat_p95=chat.tpot_p95_ms.max(),
             chat_late=chat.late.sum() / max(1, chat.gaps.sum()) * 100,
+            # The buffering a stall-free display would have needed: the worst
+            # turn, since the user meets the worst one.
+            chat_buffer=chat.buffer_ms.max() if 'buffer_ms' in chat and chat.buffer_ms.notna().any() else np.nan,
             chat_ttft=chat.ttft_s.mean() * 1000,
             summ_met=summ.met.mean() * 100, summ_e2e=summ.e2e_s.mean(),
             reply_met=reply.met.mean() * 100, reply_e2e=reply.e2e_s.mean(),
@@ -124,11 +127,14 @@ def qos(stats, mem, out_dir, tpot_target):
     s = stats[stats.mem == mem]
     arms = [a for a, _, _ in ARMS if (s.arm == a).any()]
     panels = [
-        ('chat_tpot',  'Chat TPOT (ms)',         False),
-        ('chat_ttft',  'Chat TTFT (ms)',         False),
-        ('summ_met',   'Summarise on time (%)',  True),
-        ('reply_met',  'Reply on time (%)',      True),
+        ('chat_tpot',   'Chat TPOT (ms)',           False),
+        ('chat_buffer', 'Chat display buffer (ms)', False),
+        ('chat_ttft',   'Chat TTFT (ms)',           False),
+        ('summ_met',    'Summarise on time (%)',    True),
+        ('reply_met',   'Reply on time (%)',        True),
     ]
+    if s.chat_buffer.isna().all():
+        panels = [p for p in panels if p[0] != 'chat_buffer']
     fig, axes = plt.subplots(1, len(panels), figsize=(figwidth_full, 1.5), squeeze=False)
     xs = np.arange(len(arms))
     for ax, (key, label, higher) in zip(axes[0], panels):
@@ -169,7 +175,7 @@ def main():
 
     df = load(a.csvs)
     per_run, stats = summarise(df)
-    cols = ['mem', 'arm', 'chat_tpot', 'chat_p95', 'chat_late', 'chat_ttft',
+    cols = ['mem', 'arm', 'chat_tpot', 'chat_p95', 'chat_late', 'chat_buffer', 'chat_ttft',
             'summ_met', 'summ_e2e', 'reply_met', 'reply_e2e', 'bg_tps']
     print(stats[cols].to_string(index=False, float_format=lambda v: f"{v:.1f}"))
     for mem in df.mem.unique():
