@@ -76,7 +76,7 @@ def summarise(df):
     return per_run, out.reset_index()
 
 
-def timeline(df, mem, out_dir):
+def timeline(df, mem, out_dir, ttft_target_s):
     arms = [a for a, _, _ in ARMS if (df.arm == a).any()]
     run = df.run.min()
     d = df[(df.mem == mem) & (df.run == run)]
@@ -101,27 +101,45 @@ def timeline(df, mem, out_dir):
             h = 0.8 / n_sub
             for (_, x), sub in zip(q.iterrows(), subs):
                 y = lane - 0.4 + (sub + 0.5) * h
-                missed = x.deadline == 'missed'
-                ax.barh(y, x.e2e_s, left=x.t_arrive_s, height=h * 0.9,
-                        color=ARM_COLOR[arm], edgecolor='white', linewidth=0.3,
+                # A miss: a background deadline, or a chat display that would
+                # have stalled at the target rate. A chat TTFT over target
+                # gets a black edge.
+                stalled = app == 'chat' and pd.notna(x.get('buffer_ms')) and x.buffer_ms > 0
+                missed = x.deadline == 'missed' or stalled
+                slow_start = app == 'chat' and x.ttft_s > ttft_target_s
+                edge = 'black' if slow_start else 'white'
+                # The prefill, arrival to first token, lighter; the decode full.
+                t_first = x.t_arrive_s + x.ttft_s
+                ax.barh(y, x.ttft_s, left=x.t_arrive_s, height=h * 0.9,
+                        color=ARM_COLOR[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
+                        alpha=0.35)
+                ax.barh(y, x.t_done_s - t_first, left=t_first, height=h * 0.9,
+                        color=ARM_COLOR[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
                         hatch='////' if missed else None, alpha=0.9)
                 if app == 'chat':
-                    ax.annotate(f"{x.tpot_ms:.0f}", (x.t_done_s, y), xytext=(2, 0),
+                    ax.annotate(f"{x.tpot_ms:.0f}·{int(x.gen)}", (x.t_done_s, y), xytext=(2, 0),
                                 textcoords='offset points', va='center',
                                 fontsize=FONTSIZE_ANNOTATION)
+        label = ARM_LABEL[arm]
+        if (r.status == 'truncated').any():
+            t_stop = r.t_done_s.max()
+            ax.axvline(t_stop, color='black', linewidth=0.7, linestyle=':')
+            label += f" (stopped at {t_stop:.0f} s)"
         ax.set_yticks(range(len(APPS)))
         ax.set_yticklabels([APP_LABEL[a] for a in APPS], fontsize=FONTSIZE_TICK_LABEL)
         ax.set_ylim(-0.6, len(APPS) - 0.4)
         ax.invert_yaxis()
-        ax.annotate(ARM_LABEL[arm], (1.0, 1.0), xycoords='axes fraction', xytext=(-2, -2),
+        ax.annotate(label, (1.0, 1.0), xycoords='axes fraction', xytext=(-2, -2),
                     textcoords='offset points', ha='right', va='top', fontsize=FONTSIZE_TITLE)
         ax.grid(axis='x', linewidth=0.3, alpha=0.5)
         thin_spines(ax)
     axes[-1, 0].set_xlabel('Trace time (s)', fontsize=FONTSIZE_AXIS_LABEL)
-    fig.suptitle(f"Requests over the trace, {MEM_LABEL.get(mem, mem)} (run {run}); "
-                 "hatched: deadline missed, numbers: chat TPOT (ms)",
+    fig.suptitle(f"Requests over the trace, {MEM_LABEL.get(mem, mem)} (run {run}). "
+                 "Light: prefill to the first token. Chat labels: TPOT (ms)·tokens generated.\n"
+                 "Hatched: deadline missed, or the chat's display would stall at the target rate. "
+                 "Black edge: chat TTFT over target. Dotted line: run stopped there.",
                  fontsize=FONTSIZE_TITLE)
-    fig.tight_layout(pad=0.3)
+    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.94))
     save_fig(fig, os.path.join(out_dir, f"orch-timeline-{mem}.pdf"))
 
 
@@ -169,6 +187,7 @@ def main():
     ap.add_argument('csvs', nargs='+')
     ap.add_argument('-o', '--out-dir', default=os.path.join(dir_path, '../../bench/plots/orch'))
     ap.add_argument('--tpot-target', type=float, default=208.0, help='ms, the chat target drawn')
+    ap.add_argument('--ttft-target', type=float, default=3.0, help='s, the chat TTFT bound marked')
     ap.add_argument('--png', action='store_true', help='also write a PNG beside each PDF')
     a = ap.parse_args()
     global PNG
@@ -181,7 +200,7 @@ def main():
             'summ_met', 'summ_e2e', 'reply_met', 'reply_e2e', 'bg_tps']
     print(stats[cols].to_string(index=False, float_format=lambda v: f"{v:.1f}"))
     for mem in df.mem.unique():
-        timeline(df, mem, a.out_dir)
+        timeline(df, mem, a.out_dir, a.ttft_target)
         qos(stats, mem, a.out_dir, a.tpot_target)
 
 
