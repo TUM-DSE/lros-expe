@@ -41,8 +41,10 @@
 # (scripts/parse.py apps), the trace and policies used, and the console logs
 # under logs/<mem>/<arm>/run<n>. Figures: just plot_orch <csv>.
 
-ORCH_ARMS := "slots-fifo slots-prio lros-fixed lros-adaptive"
-ORCH_MEMS := "unbounded budget"
+# In the order the results are wanted: the LROS arms first, under the budget
+# first, so that a partial sweep already compares what matters most.
+ORCH_ARMS := "lros-adaptive lros-fixed slots-prio slots-fifo"
+ORCH_MEMS := "budget unbounded"
 ORCH_MODELS_DIR := "/scratch/orangepi/models"
 ORCH_MODEL_A := "Llama-3.2-1B-Instruct-f16.gguf"
 ORCH_MODEL_B := "qwen2.5-1.5b-instruct-fp16.gguf"
@@ -62,6 +64,9 @@ ORCH_CHUNK := "64"
 # Extra arguments for the trace generator (scripts/orch_traces.py --help).
 ORCH_TRACE_ARGS := ""
 ORCH_TIMEOUT := "900"
+# The host cores the guest's four vCPUs run on: the four A76 cores, one each.
+# (The shared AFFINITY names one core, which makes the vCPUs time-share it.)
+ORCH_AFFINITY := "4-7"
 
 orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS trace_args=ORCH_TRACE_ARGS:
 	#!/usr/bin/env bash
@@ -112,7 +117,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 		echo "timestamp $ts"
 		echo "image $img"
 		echo "models $model_a $model_b lora {{ORCH_LORA}}"
-		echo "guest memory {{size_mem}}, cpus {{AFFINITY}}, timeout {{ORCH_TIMEOUT}}s"
+		echo "guest memory {{size_mem}}, cpus {{ORCH_AFFINITY}}, timeout {{ORCH_TIMEOUT}}s"
 		echo "cache unbounded {{ORCH_CACHE_UNBOUNDED}}, budget {{ORCH_BUDGET_MB}} MiB, stream {{ORCH_STREAM_ARGS}}"
 		echo "serve {{ORCH_SERVE_ARGS}}, slots {{ORCH_SLOTS}}, chunk {{ORCH_CHUNK}}"
 		echo "arms {{arms}}"; echo "mems {{mems}}"; echo "trace args {{trace_args}}"
@@ -129,6 +134,8 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 
 	echo "timestamp,run,mem,arm,$(python3 -c 'import sys; sys.path.insert(0, "{{proot}}/scripts"); import parse; print(parse.APPS_HEADER)'),status" > "$csv"
 
+	# mem outside arm: a partial sweep then holds every arm of one memory
+	# setting, which is a complete comparison.
 	for run in $(seq 1 {{n_runs}}); do
 	for mem in {{mems}}; do
 		case "$mem" in
@@ -156,7 +163,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 		vmtouch -qe "$model_a" "$model_b" 2>/dev/null || true
 		rc=0
 		timeout -k 10 {{ORCH_TIMEOUT}} \
-			taskset -c {{AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
+			taskset -c {{ORCH_AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
 			--arch aarch64 -p kvm -c 4 -m {{size_mem}} --nogdb \
 			--image-path "$img" --emulated-nvme "$data" --emulated-nvme "$model_a" --emulated-nvme "$model_b" \
 			--nvme-cache none \

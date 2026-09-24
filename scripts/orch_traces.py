@@ -107,18 +107,22 @@ def main():
     ap.add_argument("--chat-ttft", type=int, default=3000)
     ap.add_argument("--chat-len", type=int, nargs=2, default=(20, 300), help="chars per turn")
     # summarise
-    ap.add_argument("--summ-period", type=int, default=12000, help="ms")
-    ap.add_argument("--summ-n", type=int, default=20)
-    ap.add_argument("--summ-fill", type=int, default=8, help="paragraphs per prompt (~47 tok each)")
-    ap.add_argument("--summ-gen", type=int, default=32)
-    ap.add_argument("--summ-deadline", type=int, default=30000)
+    # Calibrated 2026-09-23 on the fixed LROS arm under the weights budget:
+    # the base model streams at 1 to 1.4 s per token there, so the background
+    # is sized to finish on time when it has the machine and to miss under
+    # pressure, rather than to miss always.
+    ap.add_argument("--summ-period", type=int, default=40000, help="ms")
+    ap.add_argument("--summ-n", type=int, default=6)
+    ap.add_argument("--summ-fill", type=int, default=4, help="paragraphs per prompt (~47 tok each)")
+    ap.add_argument("--summ-gen", type=int, default=16)
+    ap.add_argument("--summ-deadline", type=int, default=60000)
     ap.add_argument("--summ-prio", type=int, default=2)
     # reply bursts
     ap.add_argument("--burst-at", type=int, nargs="*", default=[60000, 150000], help="ms")
-    ap.add_argument("--burst-n", type=int, default=12)
+    ap.add_argument("--burst-n", type=int, default=8)
     ap.add_argument("--burst-spread", type=int, default=3000, help="ms over which a burst arrives")
-    ap.add_argument("--reply-gen", type=int, default=16)
-    ap.add_argument("--reply-deadline", type=int, default=10000)
+    ap.add_argument("--reply-gen", type=int, default=8)
+    ap.add_argument("--reply-deadline", type=int, default=30000)
     ap.add_argument("--reply-prio", type=int, default=1)
     ap.add_argument("--reply-len", type=int, nargs=2, default=(40, 200), help="chars per message")
     a = ap.parse_args()
