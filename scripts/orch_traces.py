@@ -114,9 +114,11 @@ def main():
     # model: the background is meant to finish on time when the weights fit
     # under every engine, and to show a trade-off under the budget, where it
     # streams at 0.35-0.5 s per token in the chat's pauses.
-    ap.add_argument("--summ-period", type=int, default=60000, help="ms")
-    ap.add_argument("--summ-n", type=int, default=4)
-    ap.add_argument("--summ-fill", type=int, default=4, help="paragraphs per prompt (~47 tok each)")
+    # Long prompts, closely spaced: the background is busy for most of the
+    # trace, with prefill that a chat turn has to displace.
+    ap.add_argument("--summ-period", type=int, default=45000, help="ms")
+    ap.add_argument("--summ-n", type=int, default=5)
+    ap.add_argument("--summ-fill", type=int, default=12, help="paragraphs per prompt (~47 tok each)")
     ap.add_argument("--summ-gen", type=int, default=16)
     ap.add_argument("--summ-deadline", type=int, default=60000)
     ap.add_argument("--summ-prio", type=int, default=2)
