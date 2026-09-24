@@ -40,6 +40,11 @@
 # Output: bench/out/orch/<timestamp>/orch.csv, one row per finished request
 # (scripts/parse.py apps), the trace and policies used, and the console logs
 # under logs/<mem>/<arm>/run<n>. Figures: just plot_orch <csv>.
+#
+# The slot arms are stopped early: once every background request is done and
+# one more chat turn has completed, since their chat crawls under the budget
+# and would run the trace out for minutes more. Their rows carry the status
+# `truncated`, and the plots take them as they are.
 
 # In the order the results are wanted: the LROS arms first, under the budget
 # first, so that a partial sweep already compares what matters most.
@@ -137,6 +142,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 	models="nvme:2,nvme:2+/root/lora.gguf,nvme:3"
 	trace="--trace /root/traces/orch.trace"
 	expect=$(grep -vcE '^#|^@|^$' "$stage/traces/orch.trace")
+	expect_bg=$(grep -cE '^[+0-9]+ (summarise|reply) ' "$stage/traces/orch.trace")
 
 	status_of() { case "$1" in 0) echo ok ;; 124|137) echo timeout ;; *) echo "failed($1)" ;; esac; }
 
@@ -179,9 +185,38 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 			--image-path "$img" --emulated-nvme "$data" --emulated-nvme "$model_a" --emulated-nvme "$model_b" \
 			--nvme-cache none \
 			--args "--cache-size $cache {{ORCH_STREAM_ARGS}} $args" \
-			< /dev/null > "$out" 2> "$err" || rc=$?
+			< /dev/null > "$out" 2> "$err" &
+		guest=$!
+		truncated=0
+		case "$arm" in slots-*)
+			# The slot engines' chat crawls under the budget and would run
+			# the trace out for minutes after the background is done. Once
+			# every summarise and reply request has finished, one more chat
+			# turn is let through and the guest is stopped.
+			chat_at_bg_done=-1
+			while kill -0 "$guest" 2>/dev/null; do
+				sleep 2
+				bg_done=$(grep -ac "DONE.*app \(summarise\|reply\) " "$out" 2>/dev/null || true)
+				chat_done=$(grep -ac "DONE.*app chat " "$out" 2>/dev/null || true)
+				if [ "$bg_done" -ge "$expect_bg" ] && [ "$chat_at_bg_done" -lt 0 ]; then
+					chat_at_bg_done=$chat_done
+				fi
+				if [ "$chat_at_bg_done" -ge 0 ] && [ "$chat_done" -gt "$chat_at_bg_done" ]; then
+					echo "  background done and one more chat turn: stopping the guest"
+					# run.py takes SIGTERM and kills its QEMU; the pkill is the fallback.
+					kill "$guest" 2>/dev/null || true
+					sleep 3
+					pkill -KILL -f "qemu-system-aarch64.*orch" 2>/dev/null || true
+					truncated=1
+					break
+				fi
+			done ;;
+		esac
+		wait "$guest" || rc=$?
+		[ "$truncated" = 1 ] && rc=0
 		rm -rf /tmp/nix-shell.*/miniosv-run-* 2>/dev/null || true
 		status=$(status_of "$rc")
+		[ "$truncated" = 1 ] && status=truncated
 		n=0
 		while IFS= read -r row; do
 			[ -n "$row" ] && { echo "$ts,$run,$mem,$arm,$row,$status" >> "$csv"; n=$((n + 1)); }

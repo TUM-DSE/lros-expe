@@ -43,7 +43,9 @@ def save_fig(fig, path):
 
 def load(csvs):
     df = pd.concat([pd.read_csv(c) for c in csvs], ignore_index=True)
-    df = df[df.status == 'ok'] if 'status' in df else df
+    # `truncated`: a slot arm stopped once its background was done and one
+    # more chat turn through; its chat figures cover the turns it made.
+    df = df[df.status.isin(['ok', 'truncated'])] if 'status' in df else df
     df['t_arrive_s'] = df.t_done_s - df.e2e_s
     df['met'] = df.deadline.map({'met': 1.0, 'missed': 0.0})
     return df
