@@ -102,17 +102,20 @@ def main():
     ap.add_argument("--think", type=int, default=10000, help="ms between a turn's completion and the next")
     ap.add_argument("--idle-after", type=int, default=4, help="turn after which the user goes idle")
     ap.add_argument("--idle", type=int, default=40000, help="ms: the long think time")
-    ap.add_argument("--chat-gen", type=int, default=64)
+    # The target stays the reading speed (4.8 tok/s, 208 ms) whatever the
+    # model: if a model meets it too easily, the experiment moves to a larger
+    # model rather than to a stricter target.
+    ap.add_argument("--chat-gen", type=int, default=96)
     ap.add_argument("--chat-tpot", type=int, default=208, help="ms: 4.8 tok/s reading speed")
     ap.add_argument("--chat-ttft", type=int, default=3000)
     ap.add_argument("--chat-len", type=int, nargs=2, default=(20, 300), help="chars per turn")
     # summarise
-    # Calibrated 2026-09-23 on the fixed LROS arm under the weights budget:
-    # the base model streams at 1 to 1.4 s per token there, so the background
-    # is sized to finish on time when it has the machine and to miss under
-    # pressure, rather than to miss always.
-    ap.add_argument("--summ-period", type=int, default=40000, help="ms")
-    ap.add_argument("--summ-n", type=int, default=6)
+    # Sized (2026-09-24) for a 3B Q8 chat model beside the 1B Q8 background
+    # model: the background is meant to finish on time when the weights fit
+    # under every engine, and to show a trade-off under the budget, where it
+    # streams at 0.35-0.5 s per token in the chat's pauses.
+    ap.add_argument("--summ-period", type=int, default=60000, help="ms")
+    ap.add_argument("--summ-n", type=int, default=4)
     ap.add_argument("--summ-fill", type=int, default=4, help="paragraphs per prompt (~47 tok each)")
     ap.add_argument("--summ-gen", type=int, default=16)
     ap.add_argument("--summ-deadline", type=int, default=60000)
@@ -122,7 +125,7 @@ def main():
     ap.add_argument("--burst-n", type=int, default=8)
     ap.add_argument("--burst-spread", type=int, default=3000, help="ms over which a burst arrives")
     ap.add_argument("--reply-gen", type=int, default=8)
-    ap.add_argument("--reply-deadline", type=int, default=30000)
+    ap.add_argument("--reply-deadline", type=int, default=40000)
     ap.add_argument("--reply-prio", type=int, default=1)
     ap.add_argument("--reply-len", type=int, nargs=2, default=(40, 200), help="chars per message")
     a = ap.parse_args()

@@ -46,17 +46,25 @@
 ORCH_ARMS := "lros-adaptive lros-fixed slots-prio slots-fifo"
 ORCH_MEMS := "budget unbounded"
 ORCH_MODELS_DIR := "/scratch/orangepi/models"
-ORCH_MODEL_A := "Llama-3.2-1B-Instruct-f16.gguf"
-ORCH_MODEL_B := "qwen2.5-1.5b-instruct-fp16.gguf"
+# Q8_0 for both: f16 decode is memory-bound past two cores on the A76s (raw
+# batched-bench 2026-09-24: Llama f16 160/114/107/109 ms on 1-4 cores against
+# Q8 118/69/60/65; Qwen f16 205/149/138/141 against q8 152/92/80/77), so with
+# Q8 a core more is a real lever, and the files are half the size.
+ORCH_MODEL_A := "Llama-3.2-1B-Instruct-Q8_0.gguf"
+# The chat model is the 3B: raw 302/177/156/165 ms per token on 1-4 cores,
+# so reading speed (208 ms) is met on two cores alone and missed on one,
+# and 12-24 t/s of prefill make the 3 s TTFT bound a constraint too.
+ORCH_MODEL_B := "Llama-3.2-3B-Instruct-Q8_0.gguf"
 ORCH_LORA := "/scratch/orangepi/orch/llama1b-lora16.gguf"
 ORCH_SHAREGPT := "/scratch/orangepi/datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
 ORCH_DATA_DIR := "/scratch/orangepi/orch"
 # The windows: what each model's page cache may hold at boot, and, under the
-# budget, what the LROS policy shares out between the two models. 5120 MiB is
-# what the 8 GiB guest leaves for weights beside three 290 MiB contexts; it
-# holds the chat model whole (3395 MiB) and 1724 MiB of the base model.
+# budget, what the LROS policy shares out between the two models. 4096 MiB
+# holds the 3B chat model whole (3263 MiB) and about 65% of the Q8 base model
+# (1260 MiB), which then streams some 0.4 GB per token; the slot engines'
+# equal split (2048 MiB each) leaves the chat model streaming instead.
 ORCH_CACHE_UNBOUNDED := "4G"
-ORCH_BUDGET_MB := "5120"
+ORCH_BUDGET_MB := "4096"
 ORCH_STREAM_ARGS := "--buffer-size 2M --prefetch-depth 16 --pin-percent 90"
 ORCH_SERVE_ARGS := "-t 4 -c 4608 -b 512 -ub 128 -np 8"
 ORCH_SLOTS := "4"
