@@ -71,7 +71,10 @@ ORCH_DATA_DIR := "/scratch/orangepi/orch"
 ORCH_CACHE_UNBOUNDED := "4G"
 ORCH_BUDGET_MB := "4096"
 ORCH_STREAM_ARGS := "--buffer-size 2M --prefetch-depth 16 --pin-percent 90"
-ORCH_SERVE_ARGS := "-t 4 -c 4608 -b 512 -ub 128 -np 8"
+# Every request generates exactly its token count (no early stop), with a
+# fixed seed and greedy sampling: the work per turn is then the same in every
+# arm and run, whatever the model would have said.
+ORCH_SERVE_ARGS := "-t 4 -c 4608 -b 512 -ub 128 -np 8 --fixed-length -s 1 --temp 0"
 ORCH_SLOTS := "4"
 ORCH_CHUNK := "64"
 # Extra arguments for the trace generator (scripts/orch_traces.py --help).
