@@ -104,6 +104,11 @@ ORCH_STREAM_ARGS := "--buffer-size 2M --prefetch-depth 16 --pin-percent 90"
 ORCH_SERVE_ARGS := "-t 4 -c 4608 -b 512 -ub 128 -np 8 --fixed-length -s 1 --temp 0"
 ORCH_SLOTS := "4"
 ORCH_CHUNK := "64"
+# Whether a chat turn's prefill leaves the floor core to the background like
+# its decode does (true), or takes every core for the second or two it lasts
+# (false; the LROS policies' setting). `just ORCH_FLOOR_PREFILL=true ...`
+# runs the comparison.
+ORCH_FLOOR_PREFILL := "false"
 # Extra arguments for the trace generator (scripts/orch_traces.py --help).
 ORCH_TRACE_ARGS := ""
 ORCH_TIMEOUT := "900"
@@ -149,7 +154,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 		    "decode":  [ { "upto_batch": 1, "workers": 2 }, { "upto_batch": 3, "workers": 3 }, { "upto_batch": 1048576, "workers": 0 } ]
 		  },
 		  "context": { "n_seq_per_task": 8, "n_ctx_per_seq": 512, "warm": 1 },
-		  "floor": { "cores": 1, "long_work_tokens": 64, "max_pause_ms": 2000, "foreground_prefill": false },
+		  "floor": { "cores": 1, "long_work_tokens": 64, "max_pause_ms": 2000, "foreground_prefill": {{ORCH_FLOOR_PREFILL}} },
 		  "preemption": { "in_iteration": true },
 		  "memory": { $budget "kv_evict": "swap" },
 		  "qos": { "adaptive": $3, "backlog_low": 2, "backlog_high": 8, "step_tokens": 4, "hold_background": true, "hold_margin": 2.0 },
@@ -173,7 +178,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 		echo "models $model_a $model_b lora {{ORCH_LORA}}"
 		echo "guest memory {{size_mem}}, cpus {{ORCH_AFFINITY}}, timeout {{ORCH_TIMEOUT}}s"
 		echo "cache unbounded {{ORCH_CACHE_UNBOUNDED}}, budget {{ORCH_BUDGET_MB}} MiB, stream {{ORCH_STREAM_ARGS}}"
-		echo "serve {{ORCH_SERVE_ARGS}}, slots {{ORCH_SLOTS}}, chunk {{ORCH_CHUNK}}"
+		echo "serve {{ORCH_SERVE_ARGS}}, slots {{ORCH_SLOTS}}, chunk {{ORCH_CHUNK}}, floor foreground_prefill {{ORCH_FLOOR_PREFILL}}"
 		echo "host {{ORCH_HOST_BIN}}, mask {{ORCH_HOST_MASK}}, anon {{ORCH_HOST_ANON_MB}} MiB"
 		echo "arms {{arms}}"; echo "mems {{mems}}"; echo "trace args {{trace_args}}"
 		echo "git $(git -C {{proot}} rev-parse --short HEAD) miniosv $(git -C {{LROS_PATH}} rev-parse --short HEAD 2>/dev/null || echo '?') app $(git -C {{LROS_PATH}}/app/llama.cpp rev-parse --short HEAD 2>/dev/null || echo '?')"
