@@ -22,6 +22,7 @@ from common import *
 
 APPS = ['chat', 'summarise', 'reply']
 APP_LABEL = {'chat': 'Chat (fg)', 'summarise': 'Summarise (bg)', 'reply': 'Reply (bg, LoRA)'}
+APP_LABEL_PAPER = {'chat': 'Chat', 'summarise': 'Summarise', 'reply': 'Reply'}
 # Fixed order and colour per arm, never cycled.
 ARMS = [
     ('host-fifo',     'llama.cpp (Linux)',        LINUX_COLOR),
@@ -79,17 +80,23 @@ def summarise(df):
     return per_run, out.reset_index()
 
 
-def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None):
+def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False):
     """One panel per arm. `arms`: (arm, label, colour) triples in panel order,
     the sweep's arms by default; `name` replaces the memory setting in the
-    file name for a one-off comparison."""
+    file name for a one-off comparison. `paper`: the version for the paper --
+    a legend instead of the explanatory title, no per-turn annotations, the
+    wait before a request starts drawn as a line ahead of its bar, and plain
+    app names."""
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
     arms = arms or [(a, l, c) for a, l, c in ARMS if (df.arm == a).any()]
     arm_label = {a: l for a, l, _ in arms}
     arm_color = {a: c for a, _, c in arms}
+    app_label = APP_LABEL_PAPER if paper else APP_LABEL
     run = df.run.min()
     d = df[(df.mem == mem) & (df.run == run)]
     fig, axes = plt.subplots(len(arms), 1, sharex=True, squeeze=False,
-                             figsize=(figwidth_full, 0.9 * len(arms) + 0.5))
+                             figsize=(figwidth_full, (1.05 if paper else 0.9) * len(arms) + 0.5))
     for ax, arm in zip(axes[:, 0], arm_label):
         r = d[d.arm == arm]
         for lane, app in enumerate(APPS):
@@ -121,14 +128,21 @@ def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None):
                 slow_start = app == 'chat' and x.ttft_s > target
                 edge = 'black' if slow_start else 'white'
                 # The prefill, arrival to first token, lighter; the decode full.
+                # In the paper version the wait before the request started is
+                # a line ahead of the bar, and the bar begins at the start.
                 t_first = x.t_arrive_s + x.ttft_s
-                ax.barh(y, x.ttft_s, left=x.t_arrive_s, height=h * 0.9,
+                t_start = x.t_arrive_s
+                if paper and pd.notna(x.get('waited_s')) and x.waited_s > 0:
+                    t_start = min(t_first, x.t_arrive_s + x.waited_s)
+                    ax.plot([x.t_arrive_s, t_start], [y, y], color=arm_color[arm],
+                            linewidth=0.8, solid_capstyle='butt', zorder=1)
+                ax.barh(y, t_first - t_start, left=t_start, height=h * 0.9,
                         color=arm_color[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
                         alpha=0.35)
                 ax.barh(y, x.t_done_s - t_first, left=t_first, height=h * 0.9,
                         color=arm_color[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
                         hatch='////' if missed else None, alpha=0.9)
-                if app == 'chat':
+                if app == 'chat' and not paper:
                     ax.annotate(f"{x.tpot_ms:.0f}·{int(x.gen)}", (x.t_done_s, y), xytext=(2, 0),
                                 textcoords='offset points', va='center',
                                 fontsize=FONTSIZE_ANNOTATION)
@@ -136,23 +150,45 @@ def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None):
         if (r.status == 'truncated').any():
             t_stop = r.t_done_s.max()
             ax.axvline(t_stop, color='black', linewidth=0.7, linestyle=':')
-            label += f" (stopped at {t_stop:.0f} s)"
+            if not paper:
+                label += f" (stopped at {t_stop:.0f} s)"
         ax.set_yticks(range(len(APPS)))
-        ax.set_yticklabels([APP_LABEL[a] for a in APPS], fontsize=FONTSIZE_TICK_LABEL)
+        ax.set_yticklabels([app_label[a] for a in APPS], fontsize=FONTSIZE_TICK_LABEL)
         ax.set_ylim(-0.6, len(APPS) - 0.4)
         ax.invert_yaxis()
-        ax.annotate(label, (1.0, 1.0), xycoords='axes fraction', xytext=(-2, -2),
-                    textcoords='offset points', ha='right', va='top', fontsize=FONTSIZE_TITLE)
+        if paper:
+            # Above the panel, where no bar can run into it.
+            ax.set_title(label, loc='right', fontsize=FONTSIZE_TITLE, pad=1.5)
+        else:
+            ax.annotate(label, (1.0, 1.0), xycoords='axes fraction', xytext=(-2, -2),
+                        textcoords='offset points', ha='right', va='top', fontsize=FONTSIZE_TITLE)
         ax.grid(axis='x', linewidth=0.3, alpha=0.5)
         thin_spines(ax)
     axes[-1, 0].set_xlabel('Trace time (s)', fontsize=FONTSIZE_AXIS_LABEL)
-    fig.suptitle(f"Requests over the trace, {MEM_LABEL.get(mem, mem)} (run {run}). "
-                 "Light: prefill to the first token. Chat labels: TPOT (ms)·tokens generated.\n"
-                 "Hatched: deadline missed, or the chat's display would stall at the target rate. "
-                 "Black edge: chat TTFT over target. Dotted line: run stopped there.",
-                 fontsize=FONTSIZE_TITLE)
-    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.94))
-    save_fig(fig, os.path.join(out_dir, f"orch-timeline-{name or mem}.pdf"))
+    if paper:
+        c = '#6a6a6a'   # the legend's swatches, in no arm's colour
+        handles = [
+            (Line2D([0], [0], color=c, linewidth=0.8), 'Waiting to start'),
+            (Patch(facecolor=c, alpha=0.35, edgecolor='white', linewidth=0.3), 'Prefill, to the first token'),
+            (Patch(facecolor=c, alpha=0.9, edgecolor='white', linewidth=0.3), 'Generation'),
+            (Patch(facecolor=c, alpha=0.9, edgecolor='white', linewidth=0.3, hatch='////'),
+             'Deadline missed / chat display stalled'),
+            (Patch(facecolor=c, alpha=0.35, edgecolor='black', linewidth=0.8), 'First token over its bound'),
+        ]
+        if (d.status == 'truncated').any():
+            handles.append((Line2D([0], [0], color='black', linewidth=0.7, linestyle=':'), 'Run stopped'))
+        fig.legend([h for h, _ in handles], [l for _, l in handles], loc='upper center',
+                   ncol=len(handles), fontsize=FONTSIZE_LEGEND, frameon=False,
+                   handlelength=1.6, columnspacing=1.2, bbox_to_anchor=(0.5, 1.0))
+        fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.95))
+    else:
+        fig.suptitle(f"Requests over the trace, {MEM_LABEL.get(mem, mem)} (run {run}). "
+                     "Light: prefill to the first token. Chat labels: TPOT (ms)·tokens generated.\n"
+                     "Hatched: deadline missed, or the chat's display would stall at the target rate. "
+                     "Black edge: chat TTFT over target. Dotted line: run stopped there.",
+                     fontsize=FONTSIZE_TITLE)
+        fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.94))
+    save_fig(fig, os.path.join(out_dir, f"orch-timeline-{name or mem}{'-paper' if paper else ''}.pdf"))
 
 
 def qos(stats, mem, out_dir, tpot_target):
@@ -206,6 +242,8 @@ def main():
     ap.add_argument('--compare', nargs='+', metavar='LABEL',
                     help='one label per CSV: draw the CSVs as the panels of one timeline')
     ap.add_argument('--name', default='compare', help='file name suffix of the comparison')
+    ap.add_argument('--paper', action='store_true',
+                    help='the timeline for the paper: legend, no annotations, waits as lines (-paper suffix)')
     a = ap.parse_args()
     global PNG
     PNG = a.png
@@ -223,7 +261,7 @@ def main():
             arms.append((f"cmp{i}", label, shades[i % len(shades)]))
         df = pd.concat(frames, ignore_index=True)
         for mem in df.mem.unique():
-            timeline(df, mem, a.out_dir, a.ttft_target, arms=arms, name=f"{a.name}-{mem}")
+            timeline(df, mem, a.out_dir, a.ttft_target, arms=arms, name=f"{a.name}-{mem}", paper=a.paper)
         return
 
     df = load(a.csvs)
@@ -232,8 +270,9 @@ def main():
             'summ_met', 'summ_e2e', 'reply_met', 'reply_e2e', 'bg_tps']
     print(stats[cols].to_string(index=False, float_format=lambda v: f"{v:.1f}"))
     for mem in df.mem.unique():
-        timeline(df, mem, a.out_dir, a.ttft_target)
-        qos(stats, mem, a.out_dir, a.tpot_target)
+        timeline(df, mem, a.out_dir, a.ttft_target, paper=a.paper)
+        if not a.paper:
+            qos(stats, mem, a.out_dir, a.tpot_target)
 
 
 if __name__ == '__main__':
