@@ -130,7 +130,11 @@ def main():
     ap.add_argument("--summ-n", type=int, default=6)
     ap.add_argument("--summ-fill", type=int, default=8, help="paragraphs per prompt (~47 tok each)")
     ap.add_argument("--summ-gen", type=int, default=16)
-    ap.add_argument("--summ-deadline", type=int, default=60000)
+    # Deadlines (2026-09-25) cover what a request costs under the budget when
+    # a chat turn and a reply burst land on it, measured with the adaptive
+    # LROS arm: a summarisation 73-87 s, a burst 38-46 s; alone they take
+    # 12-34 s and 7-8 s.
+    ap.add_argument("--summ-deadline", type=int, default=90000)
     ap.add_argument("--summ-prio", type=int, default=2)
     # reply bursts
     # One burst during an early turn, one in the chat's pause, one during a
@@ -139,7 +143,7 @@ def main():
     ap.add_argument("--burst-n", type=int, default=8)
     ap.add_argument("--burst-spread", type=int, default=3000, help="ms over which a burst arrives")
     ap.add_argument("--reply-gen", type=int, default=8)
-    ap.add_argument("--reply-deadline", type=int, default=40000)
+    ap.add_argument("--reply-deadline", type=int, default=60000)
     ap.add_argument("--reply-prio", type=int, default=1)
     ap.add_argument("--reply-len", type=int, nargs=2, default=(40, 200), help="chars per message")
     a = ap.parse_args()
