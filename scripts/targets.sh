@@ -82,10 +82,11 @@ declare -A TGT_MODELS=(
     [joy]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf"
 )
 
-# The llama.cpp checkout the native host baselines are built from.
+# Where the native host baselines are built from this tree's llama.cpp-rknn:
+# joy shares it over NFS, the orangepi gets a copy in its scratch.
 declare -A TGT_HOST_SRC=(
     [local]="$EXP_ROOT/llama.cpp-rknn"
-    [orangepi]="/home/ilya/llama.cpp-rknn"
+    [orangepi]="/scratch/$USER/lros/src/llama.cpp"
     [joy]="/home/ilya/miniosv_dev/lros-expe/llama.cpp-rknn"
 )
 

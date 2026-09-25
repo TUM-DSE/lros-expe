@@ -107,6 +107,16 @@ exp_sync_models() {
 
 exp_model() { echo "$T_SCRATCH/models/$1"; }
 
+# The pinned cores as a hex mask, for llama.cpp's -C.
+exp_cpu_mask() {
+    local m=0 part lo hi c IFS=,
+    for part in $T_CORES; do
+        lo=${part%%-*} hi=${part##*-}
+        for ((c = lo; c <= hi; c++)); do m=$((m | 1 << c)); done
+    done
+    printf '%x' "$m"
+}
+
 exp_ncores() {
     local n=0 part IFS=,
     for part in $T_CORES; do
@@ -272,8 +282,8 @@ exp_ship_image() {
     echo "$T_SCRATCH/img/$variant.img"
 }
 
-# exp_build_host <preset> [targets]: a native llama.cpp build on the target,
-# against its own libraries. Echoes the bin directory.
+# exp_build_host <preset> [targets]: a native build of this tree's llama.cpp
+# on the target, against its own libraries. Echoes the bin directory.
 exp_build_host() {
     local preset="$1" targets="${2:-llama-batched-bench llama-cli}" flags=""
     case "$preset" in
@@ -282,6 +292,11 @@ exp_build_host() {
         cuda)   flags="-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=\${CUDA_ARCH:-native}" ;;
         *)      exp_die "unknown host preset $preset" ;;
     esac
+    if [ "$T_HOST_SRC" != "$HOST_DIR" ]; then
+        tgt_sh "mkdir -p '$T_HOST_SRC'"
+        rsync -a --info=none --exclude '/build*' --exclude '.git' "$HOST_DIR/" "$T_HOST:$T_HOST_SRC/" \
+            || exp_die "could not copy llama.cpp to $TARGET"
+    fi
     exp_say "build host $preset on $TARGET"
     tgt_sh "${TGT_BUILD_ENV[$TARGET]}
         set -e
