@@ -211,6 +211,10 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 	status_of() { case "$1" in 0) echo ok ;; 124|137) echo timeout ;; *) echo "failed($1)" ;; esac; }
 
 	echo "timestamp,run,mem,arm,$(python3 -c 'import sys; sys.path.insert(0, "{{proot}}/scripts"); import parse; print(parse.APPS_HEADER)'),status" > "$csv"
+	# The cores in use over each run (scripts/parse.py width), for the
+	# utilization figure of the plots.
+	width_csv="$out_dir/width.csv"
+	echo "timestamp,run,mem,arm,$(python3 -c 'import sys; sys.path.insert(0, "{{proot}}/scripts"); import parse; print(parse.WIDTH_HEADER)')" > "$width_csv"
 
 	# mem outside arm: a partial sweep then holds every arm of one memory
 	# setting, which is a complete comparison.
@@ -320,6 +324,7 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 		while IFS= read -r row; do
 			[ -n "$row" ] && { echo "$ts,$run,$mem,$arm,$row,$status" >> "$csv"; n=$((n + 1)); }
 		done < <(python3 {{proot}}/scripts/parse.py apps "$out")
+		python3 {{proot}}/scripts/parse.py width "$out" | sed "s/^/$ts,$run,$mem,$arm,/" >> "$width_csv"
 		echo "  -> $status, $n of $expect requests"
 	done; done; done
 

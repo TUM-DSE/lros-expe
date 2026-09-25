@@ -55,6 +55,38 @@ def load(csvs):
     return df
 
 
+def load_width(csvs):
+    """The cores in use over each run, from the width.csv beside each orch.csv
+    (one row per change of a task's cores; the slot mode's threads are one
+    task). Returns {(mem, arm, run): (utilization, cores busy on average)},
+    integrated to the run's last event, over the machine's cores as the
+    widest assignment seen; empty when no width.csv exists."""
+    out = {}
+    for c in csvs:
+        path = os.path.join(os.path.dirname(os.path.abspath(c)), 'width.csv')
+        if not os.path.exists(path):
+            continue
+        w = pd.read_csv(path)
+        if w.empty:
+            continue
+        n_cores = int(w.cores.max())
+        for (mem, arm, run), d in w.groupby(['mem', 'arm', 'run']):
+            d = d.sort_values('t_s')
+            # Cores in use = sum over tasks of their latest width.
+            width_of = {}
+            busy, t_prev, total = 0, 0.0, 0.0
+            for _, x in d.iterrows():
+                total += busy * (x.t_s - t_prev)
+                t_prev = x.t_s
+                key = x.task if pd.notna(x.task) else 0
+                busy += int(x.cores) - width_of.get(key, 0)
+                width_of[key] = int(x.cores)
+            span = d.t_s.max()
+            if span > 0:
+                out[(mem, arm, run)] = (total / (n_cores * span), total / span)
+    return out
+
+
 def summarise(df):
     """Per (mem, arm, run): the QoS figures; then the mean and spread over runs."""
     rows = []
@@ -80,7 +112,7 @@ def summarise(df):
     return per_run, out.reset_index()
 
 
-def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False):
+def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False, util=None):
     """One panel per arm. `arms`: (arm, label, colour) triples in panel order,
     the sweep's arms by default; `name` replaces the memory setting in the
     file name for a one-off comparison. `paper`: the version for the paper --
@@ -147,6 +179,10 @@ def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False)
                                 textcoords='offset points', va='center',
                                 fontsize=FONTSIZE_ANNOTATION)
         label = arm_label[arm]
+        if util and (mem, arm, run) in util:
+            # Cores computing over the run, integrated: the utilization.
+            u, cores = util[(mem, arm, run)]
+            label += f", {u * 100:.0f}% busy ({cores:.1f} cores)"
         if (r.status == 'truncated').any():
             t_stop = r.t_done_s.max()
             ax.axvline(t_stop, color='black', linewidth=0.7, linestyle=':')
@@ -252,16 +288,20 @@ def main():
     if a.compare:
         if len(a.compare) != len(a.csvs):
             ap.error('--compare needs one label per CSV')
-        frames, arms = [], []
+        frames, arms, util = [], [], {}
         shades = [LROS_COLOR, lighten(LROS_COLOR, 0.45), ALT_COLOR, lighten(ALT_COLOR, 0.45)]
         for i, (csv, label) in enumerate(zip(a.csvs, a.compare)):
             d = load([csv])
             d['arm'] = f"cmp{i}"
             frames.append(d)
             arms.append((f"cmp{i}", label, shades[i % len(shades)]))
+            # One CSV may hold several arms; the panel takes the first's figure.
+            for (mem, arm, run), v in load_width([csv]).items():
+                util.setdefault((mem, f"cmp{i}", run), v)
         df = pd.concat(frames, ignore_index=True)
         for mem in df.mem.unique():
-            timeline(df, mem, a.out_dir, a.ttft_target, arms=arms, name=f"{a.name}-{mem}", paper=a.paper)
+            timeline(df, mem, a.out_dir, a.ttft_target, arms=arms, name=f"{a.name}-{mem}",
+                     paper=a.paper, util=util)
         return
 
     df = load(a.csvs)
@@ -269,8 +309,9 @@ def main():
     cols = ['mem', 'arm', 'chat_tpot', 'chat_p95', 'chat_late', 'chat_buffer', 'chat_ttft',
             'summ_met', 'summ_e2e', 'reply_met', 'reply_e2e', 'bg_tps']
     print(stats[cols].to_string(index=False, float_format=lambda v: f"{v:.1f}"))
+    util = load_width(a.csvs)
     for mem in df.mem.unique():
-        timeline(df, mem, a.out_dir, a.ttft_target, paper=a.paper)
+        timeline(df, mem, a.out_dir, a.ttft_target, paper=a.paper, util=util)
         if not a.paper:
             qos(stats, mem, a.out_dir, a.tpot_target)
 

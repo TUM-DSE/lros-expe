@@ -25,6 +25,10 @@ RE_QOS = re.compile(
     r"late (?P<late>\d+)/(?P<gaps>\d+), app (?P<app>\S+) sess (?P<sess>-?\d+) turn (?P<turn>\d+), "
     r"e2e\s+(?P<e2e>[\d.]+) s, deadline (?P<deadline>\w+)(?:, buffer\s+(?P<buffer>[\d.]+) ms)?"
     r"(?:, ttft_target\s+(?P<ttft_target>[\d.]+) s)?")
+# The cores in use over the run: one line per change of a task's width in
+# the lros mode ("task N width W"), or of the threads' busy state in the slot
+# mode ("busy W"), W = 0 when it pauses or ends.
+RE_WIDTH = re.compile(r"\[t=\s*(?P<t>[\d.]+) s\] (?:task (?P<task>\d+) width|busy) (?P<cores>\d+)$")
 RE_BENCH = re.compile(
     r"^\|\s*(?P<pp>\d+)\s*\|\s*(?P<tg>\d+)\s*\|\s*(?P<b>\d+)\s*\|\s*(?P<nkv>\d+)\s*"
     r"\|\s*(?P<t_pp>[\d.]+)\s*\|\s*(?P<s_pp>[\d.]+)\s*\|\s*(?P<t_tg>[\d.]+)\s*"
@@ -95,8 +99,24 @@ def apps(text):
     return [",".join(str(v) for v in r) for r in rows]
 
 
+# A row per change of the cores in use: the trace time, the task (empty in
+# the slot mode, whose threads are one unit) and the cores it computes on
+# from then, 0 when it pauses or ends. Integrated over the run, the cores
+# busy over time.
+WIDTH_HEADER = "t_s,task,cores"
+
+
+def width(text):
+    rows = []
+    for line in text.splitlines():
+        m = RE_WIDTH.search(line)
+        if m:
+            rows.append(f"{m['t']},{m['task'] or ''},{m['cores']}")
+    return rows
+
+
 if __name__ == "__main__":
-    modes = {"serve": serve, "requests": requests, "bench": bench, "apps": apps}
+    modes = {"serve": serve, "requests": requests, "bench": bench, "apps": apps, "width": width}
     if len(sys.argv) != 3 or sys.argv[1] not in modes:
         sys.exit(__doc__.strip())
     with open(sys.argv[2], "rb") as f:
