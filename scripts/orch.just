@@ -28,9 +28,12 @@
 #           host-prio       engine on Linux, pinned to the four A76 cores, the
 #                           models mmap'd and served by the kernel's page cache.
 #                           fifo: one pool of slots per model, arrival order,
-#                           what llama.cpp's server does; prio: slots with
-#                           priority, parking and chunked prefill, what a
-#                           vLLM/SGLang-like engine does. Under the budget the
+#                           the pools stepped in turn, what llama.cpp's
+#                           server does; prio: slots with priority, parking
+#                           and chunked prefill, and across the models only
+#                           the pools holding the best priority present take
+#                           a step, what a vLLM/SGLang-like engine with
+#                           priorities does. Under the budget the
 #                           process runs in a memory cgroup of the budget plus
 #                           its own anonymous memory, so the kernel reclaims
 #                           the models' pages by its LRU, knowing no roles.
