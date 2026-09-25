@@ -18,8 +18,10 @@ Phases, in order:
   1. background only: summarise (and the first reply burst, if placed there)
      have the machine to themselves
   2. the chat arrives and takes its turns
-  3. the chat goes idle for a long think time while the background fills memory
-  4. the chat returns; a reply burst lands during one of its turns
+  3. the chat goes idle for a long think time while the background fills
+     memory; a reply burst lands in the pause
+  4. the chat returns; a reply burst lands during one of its turns, beside a
+     summarisation
 
 The chat's turns are the human turns of one ShareGPT conversation; the reply
 prompts are short ShareGPT opening messages; the summarisation prompts are
@@ -107,23 +109,33 @@ def main():
     # model rather than to a stricter target.
     ap.add_argument("--chat-gen", type=int, default=96)
     ap.add_argument("--chat-tpot", type=int, default=208, help="ms: 4.8 tok/s reading speed")
-    ap.add_argument("--chat-ttft", type=int, default=3000)
+    # First token: a base plus a term per prompt token, so a longer turn is
+    # allowed longer. 60 ms/token is two thirds of the 3B model's raw
+    # four-core prefill rate (24 t/s), the second covers the first decode
+    # step and the scheduling.
+    ap.add_argument("--chat-ttft", type=int, default=1000, help="ms, base")
+    ap.add_argument("--chat-ttft-tok", type=int, default=60, help="ms per prompt token")
     ap.add_argument("--chat-len", type=int, nargs=2, default=(20, 300), help="chars per turn")
     # summarise
     # Sized (2026-09-24) for a 3B Q8 chat model beside the 1B Q8 background
     # model: the background is meant to finish on time when the weights fit
     # under every engine, and to show a trade-off under the budget, where it
     # streams at 0.35-0.5 s per token in the chat's pauses.
-    # Long prompts, closely spaced: the background is busy for most of the
-    # trace, with prefill that a chat turn has to displace.
-    ap.add_argument("--summ-period", type=int, default=45000, help="ms")
-    ap.add_argument("--summ-n", type=int, default=5)
-    ap.add_argument("--summ-fill", type=int, default=12, help="paragraphs per prompt (~47 tok each)")
+    # Long prompts through the whole chat period, with prefill that a chat
+    # turn has to displace; spaced so that one request is done before the
+    # next arrives under the budget (2026-09-25: 553 tokens every 45 s took
+    # 55-70 s each on one core beside the chat and queued up, every engine
+    # missing the deadline).
+    ap.add_argument("--summ-period", type=int, default=55000, help="ms")
+    ap.add_argument("--summ-n", type=int, default=6)
+    ap.add_argument("--summ-fill", type=int, default=8, help="paragraphs per prompt (~47 tok each)")
     ap.add_argument("--summ-gen", type=int, default=16)
     ap.add_argument("--summ-deadline", type=int, default=60000)
     ap.add_argument("--summ-prio", type=int, default=2)
     # reply bursts
-    ap.add_argument("--burst-at", type=int, nargs="*", default=[60000, 150000], help="ms")
+    # One burst during an early turn, one in the chat's pause, one during a
+    # late turn beside a streaming summarisation.
+    ap.add_argument("--burst-at", type=int, nargs="*", default=[60000, 150000, 250000], help="ms")
     ap.add_argument("--burst-n", type=int, default=8)
     ap.add_argument("--burst-spread", type=int, default=3000, help="ms over which a burst arrives")
     ap.add_argument("--reply-gen", type=int, default=8)
@@ -138,7 +150,7 @@ def main():
 
     lines = []
     lines.append(f"@app chat model={a.chat_model} prio=0 role=foreground "
-                 f"tpot_ms={a.chat_tpot} ttft_ms={a.chat_ttft}")
+                 f"tpot_ms={a.chat_tpot} ttft_ms={a.chat_ttft} ttft_tok_ms={a.chat_ttft_tok}")
     lines.append(f"@app summarise model={a.summ_model} prio={a.summ_prio} role=background "
                  f"deadline_ms={a.summ_deadline}")
     lines.append(f"@app reply model={a.reply_model} prio={a.reply_prio} role=background "
