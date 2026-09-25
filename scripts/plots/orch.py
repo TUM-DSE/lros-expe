@@ -28,8 +28,9 @@ ARMS = [
     ('host-prio',     'vLLM/SGLang-like (Linux)', ALT_COLOR),
     ('slots-fifo',    'llama.cpp (guest)',        lighten(LINUX_COLOR, 0.45)),
     ('slots-prio',    'vLLM/SGLang-like (guest)', lighten(ALT_COLOR, 0.45)),
-    ('lros-fixed',    'LROS, fixed',              lighten(LROS_COLOR, 0.45)),
-    ('lros-adaptive', 'LROS, adaptive',           LROS_COLOR),
+    ('lros-default',  'LROS, default',            lighten(LROS_COLOR, 0.7)),
+    ('lros-fixed',    'LROS, policy',             lighten(LROS_COLOR, 0.4)),
+    ('lros-adaptive', 'LROS, policy + QoS',       LROS_COLOR),
 ]
 ARM_LABEL = {a: l for a, l, _ in ARMS}
 ARM_COLOR = {a: c for a, _, c in ARMS}

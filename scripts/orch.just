@@ -34,11 +34,21 @@
 #                           process runs in a memory cgroup of the budget plus
 #                           its own anonymous memory, so the kernel reclaims
 #                           the models' pages by its LRU, knowing no roles.
-#           lros-fixed      the task path in the guest, with the calibrated
-#                           width rules, priorities and in-iteration preemption
-#           lros-adaptive   the same, plus the QoS controller: a foreground
-#                           app behind its TPOT target widens its task, and
-#                           background tasks with deadline slack are held
+#           lros-default    the task path in the guest with no policy file:
+#                           the engine's built-in defaults (every task takes
+#                           every free core, priority order, a floor core
+#                           past 64 tokens, no in-iteration preemption, no
+#                           weight windows -- the models keep the equal
+#                           per-file cache the slot arms get)
+#           lros-fixed      the task path with a policy: the calibrated width
+#                           rules, in-iteration preemption, a chat prefill
+#                           exempt from the floor, and under the budget the
+#                           weights shared out with the foreground's model
+#                           first
+#           lros-adaptive   the same policy plus its QoS flags: a foreground
+#                           request starts on every core, widens when behind
+#                           its rate and gives back when ahead, and background
+#                           tasks with deadline slack are held
 #           slots-fifo      the slot engines inside the guest (not swept by
 #           slots-prio      default): the baselines on LROS's own page cache
 #
@@ -59,7 +69,7 @@
 
 # In the order the results are wanted: the LROS arms first, under the budget
 # first, so that a partial sweep already compares what matters most.
-ORCH_ARMS := "lros-adaptive lros-fixed host-prio host-fifo"
+ORCH_ARMS := "lros-adaptive lros-fixed lros-default host-prio host-fifo"
 ORCH_MEMS := "budget unbounded"
 # The host arms: the clang build of the same lros-serve (just build linux
 # cpu-clang with LLAMA_CPP_TARGETS=llama-lros-serve), its threads pinned one
@@ -95,7 +105,11 @@ ORCH_DATA_DIR := "/scratch/orangepi/orch"
 # holds the 3B chat model whole (3263 MiB) and about 65% of the Q8 base model
 # (1260 MiB), which then streams some 0.4 GB per token; the slot engines'
 # equal split (2048 MiB each) leaves the chat model streaming instead.
-ORCH_CACHE_UNBOUNDED := "4G"
+# Unbounded: above both files together (3263 + 1259 MiB); 4G left the chat
+# model's tail streaming whenever the 1B model was in use (found 2026-09-25).
+# Needs the 10G guest: at 4G of cache the 8G guest had 1.7 GB free with the
+# task contexts built.
+ORCH_CACHE_UNBOUNDED := "5G"
 ORCH_BUDGET_MB := "4096"
 ORCH_STREAM_ARGS := "--buffer-size 2M --prefetch-depth 16 --pin-percent 90"
 # Every request generates exactly its token count (no early stop), with a
@@ -118,7 +132,7 @@ ORCH_AFFINITY := "4-7"
 
 # truncate=1 stops a slot arm (host or guest) once its background is done and
 # one more chat turn through, for quick numbers; the evaluation runs with 0.
-orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS trace_args=ORCH_TRACE_ARGS truncate="1":
+orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS trace_args=ORCH_TRACE_ARGS truncate="1":
 	#!/usr/bin/env bash
 	set -euo pipefail
 
@@ -146,7 +160,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 	cp "{{ORCH_LORA}}" "$stage/lora.gguf"
 	policy() {   # <name> <budget_mb or 0> <adaptive>
 		local budget="" qos=""
-		[ "$2" != 0 ] && budget="\"weights_budget_mb\": $2, \"weights_idle_ms\": 5000, \"weights_floor_pct\": 10,"
+		[ "$2" != 0 ] && budget="\"weights_budget_mb\": $2, \"weights_idle_ms\": 5000, \"weights_floor_pct\": 10, \"weights_prefer\": \"foreground\","
 		cat > "$stage/policies/$1.json" <<-EOF
 		{
 		  "width": {
@@ -157,7 +171,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 		  "floor": { "cores": 1, "long_work_tokens": 64, "max_pause_ms": 2000, "foreground_prefill": {{ORCH_FLOOR_PREFILL}} },
 		  "preemption": { "in_iteration": true },
 		  "memory": { $budget "kv_evict": "swap" },
-		  "qos": { "adaptive": $3, "backlog_low": 2, "backlog_high": 8, "step_tokens": 4, "hold_background": true, "hold_margin": 2.0 },
+		  "qos": { "widen": $3, "give_back": $3, "start_wide": $3, "hold_background": $3, "backlog_low": 2, "backlog_high": 8, "step_tokens": 4, "hold_margin": 2.0 },
 		  "sessions": { "idle_kv": "keep" }
 		}
 		EOF
@@ -219,6 +233,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 			host-prio)     serve="--models $hmodels $htrace --mode slots --chunk {{ORCH_CHUNK}} -np {{ORCH_SLOTS}} $hpin -m $model_a" ;;
 			slots-fifo)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --fifo -np {{ORCH_SLOTS}} $pin" ;;
 			slots-prio)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --chunk {{ORCH_CHUNK}} -np {{ORCH_SLOTS}} $pin" ;;
+			lros-default)  serve="lros-serve -m nvme:2 --models $models $trace --mode lros" ;;
 			lros-fixed)    serve="lros-serve -m nvme:2 --models $models $trace --mode lros --policy /root/policies/fixed-$suffix.json" ;;
 			lros-adaptive) serve="lros-serve -m nvme:2 --models $models $trace --mode lros --policy /root/policies/adaptive-$suffix.json" ;;
 			*) echo "unknown arm $arm" >&2; exit 1 ;;
@@ -266,7 +281,7 @@ orch_sweep n_runs="1" size_mem="8G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS
 			local pid; pid=$(pgrep -n -f "^{{ORCH_HOST_BIN}} " 2>/dev/null || true)
 			[ -n "$pid" ] && awk '/^RssAnon/ {print $2}' "/proc/$pid/status" 2>/dev/null || echo 0
 		}
-		case "$arm" in slots-*|host-*)
+		case "$arm" in slots-*|host-*|lros-default)
 			# The slot engines' chat crawls under the budget and would run
 			# the trace out for minutes after the background is done. Once
 			# every summarise and reply request has finished, one more chat
