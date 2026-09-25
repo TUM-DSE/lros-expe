@@ -108,7 +108,11 @@ def timeline(df, mem, out_dir, ttft_target_s):
                 # gets a black edge.
                 stalled = app == 'chat' and pd.notna(x.get('buffer_ms')) and x.buffer_ms > 0
                 missed = x.deadline == 'missed' or stalled
-                slow_start = app == 'chat' and x.ttft_s > ttft_target_s
+                # The bound the request's prompt length allowed it, when the
+                # log carries one; the flag's fixed bound for older logs.
+                target = x.get('ttft_target_s')
+                target = target if pd.notna(target) and target > 0 else ttft_target_s
+                slow_start = app == 'chat' and x.ttft_s > target
                 edge = 'black' if slow_start else 'white'
                 # The prefill, arrival to first token, lighter; the decode full.
                 t_first = x.t_arrive_s + x.ttft_s
@@ -189,7 +193,8 @@ def main():
     ap.add_argument('csvs', nargs='+')
     ap.add_argument('-o', '--out-dir', default=os.path.join(dir_path, '../../bench/plots/orch'))
     ap.add_argument('--tpot-target', type=float, default=208.0, help='ms, the chat target drawn')
-    ap.add_argument('--ttft-target', type=float, default=3.0, help='s, the chat TTFT bound marked')
+    ap.add_argument('--ttft-target', type=float, default=3.0,
+                    help='s, the chat TTFT bound marked for logs without a per-request target')
     ap.add_argument('--png', action='store_true', help='also write a PNG beside each PDF')
     a = ap.parse_args()
     global PNG
