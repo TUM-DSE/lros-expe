@@ -78,13 +78,18 @@ def summarise(df):
     return per_run, out.reset_index()
 
 
-def timeline(df, mem, out_dir, ttft_target_s):
-    arms = [a for a, _, _ in ARMS if (df.arm == a).any()]
+def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None):
+    """One panel per arm. `arms`: (arm, label, colour) triples in panel order,
+    the sweep's arms by default; `name` replaces the memory setting in the
+    file name for a one-off comparison."""
+    arms = arms or [(a, l, c) for a, l, c in ARMS if (df.arm == a).any()]
+    arm_label = {a: l for a, l, _ in arms}
+    arm_color = {a: c for a, _, c in arms}
     run = df.run.min()
     d = df[(df.mem == mem) & (df.run == run)]
     fig, axes = plt.subplots(len(arms), 1, sharex=True, squeeze=False,
                              figsize=(figwidth_full, 0.9 * len(arms) + 0.5))
-    for ax, arm in zip(axes[:, 0], arms):
+    for ax, arm in zip(axes[:, 0], arm_label):
         r = d[d.arm == arm]
         for lane, app in enumerate(APPS):
             q = r[r.app == app].sort_values('t_arrive_s')
@@ -117,16 +122,16 @@ def timeline(df, mem, out_dir, ttft_target_s):
                 # The prefill, arrival to first token, lighter; the decode full.
                 t_first = x.t_arrive_s + x.ttft_s
                 ax.barh(y, x.ttft_s, left=x.t_arrive_s, height=h * 0.9,
-                        color=ARM_COLOR[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
+                        color=arm_color[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
                         alpha=0.35)
                 ax.barh(y, x.t_done_s - t_first, left=t_first, height=h * 0.9,
-                        color=ARM_COLOR[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
+                        color=arm_color[arm], edgecolor=edge, linewidth=0.3 if edge == 'white' else 0.8,
                         hatch='////' if missed else None, alpha=0.9)
                 if app == 'chat':
                     ax.annotate(f"{x.tpot_ms:.0f}·{int(x.gen)}", (x.t_done_s, y), xytext=(2, 0),
                                 textcoords='offset points', va='center',
                                 fontsize=FONTSIZE_ANNOTATION)
-        label = ARM_LABEL[arm]
+        label = arm_label[arm]
         if (r.status == 'truncated').any():
             t_stop = r.t_done_s.max()
             ax.axvline(t_stop, color='black', linewidth=0.7, linestyle=':')
@@ -146,7 +151,7 @@ def timeline(df, mem, out_dir, ttft_target_s):
                  "Black edge: chat TTFT over target. Dotted line: run stopped there.",
                  fontsize=FONTSIZE_TITLE)
     fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.94))
-    save_fig(fig, os.path.join(out_dir, f"orch-timeline-{mem}.pdf"))
+    save_fig(fig, os.path.join(out_dir, f"orch-timeline-{name or mem}.pdf"))
 
 
 def qos(stats, mem, out_dir, tpot_target):
@@ -196,10 +201,29 @@ def main():
     ap.add_argument('--ttft-target', type=float, default=3.0,
                     help='s, the chat TTFT bound marked for logs without a per-request target')
     ap.add_argument('--png', action='store_true', help='also write a PNG beside each PDF')
+    # A one-off comparison: one panel per CSV, labelled, in orch-timeline-<name>.
+    ap.add_argument('--compare', nargs='+', metavar='LABEL',
+                    help='one label per CSV: draw the CSVs as the panels of one timeline')
+    ap.add_argument('--name', default='compare', help='file name suffix of the comparison')
     a = ap.parse_args()
     global PNG
     PNG = a.png
     os.makedirs(a.out_dir, exist_ok=True)
+
+    if a.compare:
+        if len(a.compare) != len(a.csvs):
+            ap.error('--compare needs one label per CSV')
+        frames, arms = [], []
+        shades = [LROS_COLOR, lighten(LROS_COLOR, 0.45), ALT_COLOR, lighten(ALT_COLOR, 0.45)]
+        for i, (csv, label) in enumerate(zip(a.csvs, a.compare)):
+            d = load([csv])
+            d['arm'] = f"cmp{i}"
+            frames.append(d)
+            arms.append((f"cmp{i}", label, shades[i % len(shades)]))
+        df = pd.concat(frames, ignore_index=True)
+        for mem in df.mem.unique():
+            timeline(df, mem, a.out_dir, a.ttft_target, arms=arms, name=f"{a.name}-{mem}")
+        return
 
     df = load(a.csvs)
     per_run, stats = summarise(df)
