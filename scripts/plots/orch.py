@@ -58,9 +58,8 @@ def load(csvs):
 def load_width(csvs):
     """The cores in use over each run, from the width.csv beside each orch.csv
     (one row per change of a task's cores; the slot mode's threads are one
-    task). Returns {(mem, arm, run): (utilization, cores busy on average)},
-    integrated to the run's last event, over the machine's cores as the
-    widest assignment seen; empty when no width.csv exists."""
+    task). Returns {(mem, arm, run): CPU seconds}, the cores computing
+    integrated over the run; empty when no width.csv exists."""
     out = {}
     for c in csvs:
         path = os.path.join(os.path.dirname(os.path.abspath(c)), 'width.csv')
@@ -84,9 +83,7 @@ def load_width(csvs):
                 key = x.task if pd.notna(x.task) else 0
                 busy += int(x.cores) - width_of.get(key, 0)
                 width_of[key] = int(x.cores)
-            span = d.t_s.max()
-            if span > 0:
-                out[(mem, arm, run)] = (total / (n_cores * span), total / span)
+            out[(mem, arm, run)] = total   # CPU seconds: cores computing, integrated
     return out
 
 
@@ -183,9 +180,8 @@ def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False,
                                 fontsize=FONTSIZE_ANNOTATION)
         label = arm_label[arm]
         if util and (mem, arm, run) in util:
-            # Cores computing over the run, integrated: the utilization.
-            u, cores = util[(mem, arm, run)]
-            label += f", {u * 100:.0f}% busy ({cores:.1f} cores)"
+            # Cores computing over the run, integrated: the CPU seconds spent.
+            label += f", {util[(mem, arm, run)]:.0f} CPU s"
         if (r.status == 'truncated').any():
             t_stop = r.t_done_s.max()
             ax.axvline(t_stop, color='black', linewidth=0.7, linestyle=':')
