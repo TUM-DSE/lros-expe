@@ -76,6 +76,9 @@ def load_width(csvs):
             width_of = {}
             busy, t_prev, total = 0, 0.0, 0.0
             for _, x in d.iterrows():
+                # Widths are disjoint by construction: a task a better one
+                # takes a core from mid-iteration is logged at 0 from that
+                # moment until it runs again.
                 total += busy * (x.t_s - t_prev)
                 t_prev = x.t_s
                 key = x.task if pd.notna(x.task) else 0
