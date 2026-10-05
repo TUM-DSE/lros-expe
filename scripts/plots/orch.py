@@ -128,7 +128,7 @@ def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False,
     run = df.run.min()
     d = df[(df.mem == mem) & (df.run == run)]
     fig, axes = plt.subplots(len(arms), 1, sharex=True, squeeze=False,
-                             figsize=(figwidth_full, (1.05 if paper else 0.9) * len(arms) + 0.5))
+                             figsize=(figwidth_full, (0.8 if paper else 0.9) * len(arms) + 0.5))
     for ax, arm in zip(axes[:, 0], arm_label):
         r = d[d.arm == arm]
         for lane, app in enumerate(APPS):
@@ -181,7 +181,12 @@ def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False,
         label = arm_label[arm]
         if util and (mem, arm, run) in util:
             # Cores computing over the run, integrated: the CPU seconds spent.
-            label += f", {util[(mem, arm, run)]:.0f} CPU s"
+            # In the paper version beside the panel, on the right.
+            if paper:
+                ax.text(1.008, 0.5, f"{util[(mem, arm, run)]:.0f}\nCPU s", transform=ax.transAxes,
+                        ha='left', va='center', fontsize=FONTSIZE, fontweight='bold', linespacing=1.1)
+            else:
+                label += f", {util[(mem, arm, run)]:.0f} CPU s"
         if (r.status == 'truncated').any():
             t_stop = r.t_done_s.max()
             ax.axvline(t_stop, color='black', linewidth=0.7, linestyle=':')
@@ -210,12 +215,13 @@ def timeline(df, mem, out_dir, ttft_target_s, arms=None, name=None, paper=False,
              'Deadline missed / chat display stalled'),
             (Patch(facecolor=c, alpha=0.35, edgecolor='black', linewidth=0.8), 'First token over its bound'),
         ]
-        if (d.status == 'truncated').any():
+        if (d[d.arm.isin(arm_label)].status == 'truncated').any():
             handles.append((Line2D([0], [0], color='black', linewidth=0.7, linestyle=':'), 'Run stopped'))
         fig.legend([h for h, _ in handles], [l for _, l in handles], loc='upper center',
                    ncol=len(handles), fontsize=FONTSIZE_LEGEND, frameon=False,
                    handlelength=1.6, columnspacing=1.2, bbox_to_anchor=(0.5, 1.0))
-        fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.95))
+        # Room on the right for the CPU seconds beside each panel.
+        fig.tight_layout(pad=0.3, rect=(0, 0, 0.95 if util else 1, 0.93))
     else:
         fig.suptitle(f"Requests over the trace, {MEM_LABEL.get(mem, mem)} (run {run}). "
                      "Light: prefill to the first token. Chat labels: TPOT (ms)·tokens generated.\n"
@@ -279,7 +285,12 @@ def main():
     ap.add_argument('--name', default='compare', help='file name suffix of the comparison')
     ap.add_argument('--paper', action='store_true',
                     help='the timeline for the paper: legend, no annotations, waits as lines (-paper suffix)')
+    ap.add_argument('--arms', help='comma-separated arms to draw, in this order (default: all present)')
     a = ap.parse_args()
+    if a.arms:
+        keep = a.arms.split(',')
+        global ARMS
+        ARMS = [next(t for t in ARMS if t[0] == k) for k in keep]
     global PNG
     PNG = a.png
     os.makedirs(a.out_dir, exist_ok=True)
