@@ -115,8 +115,53 @@ def width(text):
     return rows
 
 
+# Lines of key=value fields after a tag: "[t= 63.13 s] ITER task=5 dt_s=2.660 ...".
+# One row per line, the trace time first, then the fields in HEADER order.
+RE_KV_LINE = re.compile(r"\[t=\s*(?P<t>[\d.]+) s\] (?P<tag>[A-Z]+) (?P<rest>(?:\w+=\S+\s*)+)$")
+
+
+def kv_rows(text, tag, fields):
+    rows = []
+    for line in text.splitlines():
+        m = RE_KV_LINE.search(line)
+        if not m or m["tag"] != tag:
+            continue
+        kv = dict(f.split("=", 1) for f in m["rest"].split())
+        rows.append(",".join([m["t"]] + [kv.get(f, "") for f in fields]))
+    return rows
+
+
+# The lros mode's iterations: trace time at the end, the task, its duration,
+# the cores it ran on, the members and tokens of its batch, and its phase.
+ITERS_HEADER = "t_s,task,dt_s,cores,members,tokens,phase"
+# The slot mode's steps: trace time at the end, the pool's model, duration,
+# active clients and tokens of its batch.
+STEPS_HEADER = "t_s,model,dt_s,clients,tokens"
+# Every token of every request: the request and the token's time since the
+# request's arrival, in ms, one row per token.
+TOKENS_HEADER = "t_done_s,req,i,t_ms"
+
+
+def iters(text):
+    return kv_rows(text, "ITER", ["task", "dt_s", "cores", "members", "tokens", "phase"])
+
+
+def steps(text):
+    return kv_rows(text, "STEP", ["model", "dt_s", "clients", "tokens"])
+
+
+def tokens(text):
+    rows = []
+    for row in kv_rows(text, "TOKENS", ["req", "ms"]):
+        t, req, ms = row.split(",", 2)
+        for i, v in enumerate(ms.split(",")):
+            rows.append(f"{t},{req},{i},{v}")
+    return rows
+
+
 if __name__ == "__main__":
-    modes = {"serve": serve, "requests": requests, "bench": bench, "apps": apps, "width": width}
+    modes = {"serve": serve, "requests": requests, "bench": bench, "apps": apps, "width": width,
+             "iters": iters, "steps": steps, "tokens": tokens}
     if len(sys.argv) != 3 or sys.argv[1] not in modes:
         sys.exit(__doc__.strip())
     with open(sys.argv[2], "rb") as f:
