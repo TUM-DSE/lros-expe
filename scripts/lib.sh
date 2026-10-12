@@ -171,7 +171,8 @@ exp_flush_memory() {
         drop() { echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || sudo -n sh -c 'echo 3 > /proc/sys/vm/drop_caches'; }
         drop 2>/dev/null || exit 0
         used=\$(awk '/SwapTotal/{t=\$2} /SwapFree/{f=\$2} END{print t-f}' /proc/meminfo)
-        [ \"\$used\" -gt 0 ] && sudo -n swapoff -a 2>/dev/null && sudo -n swapon -a 2>/dev/null
+        devs=\$(awk 'NR>1{print \$1}' /proc/swaps)
+        [ \"\$used\" -gt 0 ] && sudo -n swapoff -a 2>/dev/null && sudo -n swapon \$devs 2>/dev/null
         true" >/dev/null 2>&1
 }
 
@@ -253,8 +254,9 @@ exp_parse() { python3 "$EXP_ROOT/scripts/parse.py" "$@"; }
 
 # --- building ---------------------------------------------------------------
 
-# exp_build_guest <variant> [vaccel] [sgemm]: a guest image built here, one out
-# directory per variant; viai selects the graph-level backend. Echoes the image.
+# exp_build_guest <variant> [vaccel] [sgemm]: a guest image built here in the
+# flake's QEMU-less shell, one out directory per variant; viai selects the
+# graph-level backend, EXP_GUEST_CONF adds make variables. Echoes the image.
 exp_build_guest() {
     local variant="$1" vaccel="${2:-1}" sgemm="${3:-1}" vgpu=0
     local out="build/$variant.aarch64"
@@ -262,9 +264,9 @@ exp_build_guest() {
     exp_say "build guest $variant (vaccel=$vaccel viai=$vgpu sgemm=$sgemm)"
     (
         flock 9
-        nix develop "$GUEST_DIR" --command make -C "$GUEST_DIR" -j"$(nproc)" \
+        nix develop "$GUEST_DIR#build" --command make -C "$GUEST_DIR" -j"$(nproc)" \
             app=app/llama.cpp arch=aarch64 out="$out" \
-            conf_vaccel="$vaccel" conf_viai="$vgpu" conf_llama_sgemm="$sgemm" \
+            conf_vaccel="$vaccel" conf_viai="$vgpu" conf_llama_sgemm="$sgemm" ${EXP_GUEST_CONF:-} \
             > "$LOCAL_TMP/build-$variant.log" 2>&1
     ) 9> "$LOCAL_TMP/build-$variant.lock" \
         || { tail -30 "$LOCAL_TMP/build-$variant.log" >&2; exp_die "guest build $variant failed"; }
@@ -285,13 +287,19 @@ exp_ship_image() {
 # exp_build_host <preset> [targets]: a native build of this tree's llama.cpp
 # on the target, against its own libraries. Echoes the bin directory.
 exp_build_host() {
-    local preset="$1" targets="${2:-llama-batched-bench llama-cli}" flags=""
+    local preset="$1" targets="${2:-llama-batched-bench llama-cli}" flags="" pre=""
     case "$preset" in
         cpu)    ;;
+        # The guest's toolchain: clang from a release the boards' nix can still
+        # evaluate, and ggml's own threadpool instead of OpenMP.
+        cpu-clang) pre='nix build --no-link github:NixOS/nixpkgs/nixos-25.05#llvmPackages_20.clang && CLANG=$(nix path-info github:NixOS/nixpkgs/nixos-25.05#llvmPackages_20.clang)'
+                   flags='-DGGML_OPENMP=OFF -DCMAKE_C_COMPILER=$CLANG/bin/clang -DCMAKE_CXX_COMPILER=$CLANG/bin/clang++' ;;
         rknnoh) flags="-DGGML_RKNNOH=ON" ;;
         cuda)   flags="-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=\${CUDA_ARCH:-native}" ;;
         *)      exp_die "unknown host preset $preset" ;;
     esac
+    local arch="${TGT_CPU_ARCH[$TARGET]:-}"
+    [ -n "$arch" ] && flags="$flags -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=$arch"
     if [ "$T_HOST_SRC" != "$HOST_DIR" ]; then
         tgt_sh "mkdir -p '$T_HOST_SRC'"
         rsync -a --info=none --exclude '/build*' --exclude '.git' "$HOST_DIR/" "$T_HOST:$T_HOST_SRC/" \
@@ -300,12 +308,16 @@ exp_build_host() {
     exp_say "build host $preset on $TARGET"
     tgt_sh "${TGT_BUILD_ENV[$TARGET]}
         set -e
+        $pre
         dir='$T_HOST_SRC/build-$preset'
         if [ -f \"\$dir/CMakeCache.txt\" ] && [ ! -f \"\$dir/Makefile\" ]; then rm -rf \"\$dir\"; fi
-        [ -f \"\$dir/CMakeCache.txt\" ] || cmake -S '$T_HOST_SRC' -B \"\$dir\" -DCMAKE_BUILD_TYPE=Release $flags
-        cmake --build \"\$dir\" -j\$(nproc) -t $targets
-    " > "$LOCAL_TMP/build-host-$preset.log" 2>&1 \
-        || { tail -30 "$LOCAL_TMP/build-host-$preset.log" >&2; exp_warn "host build $preset failed on $TARGET"; return 1; }
+        # A stale cache (another compiler, tools since collected) fails the
+        # configure or the build: start once more from an empty directory.
+        build() { cmake -S '$T_HOST_SRC' -B \"\$dir\" -DCMAKE_BUILD_TYPE=Release $flags > /dev/null &&
+                  cmake --build \"\$dir\" -j\$(nproc) -t $targets; }
+        build || { rm -rf \"\$dir\"; build; }
+    " > "$LOCAL_TMP/build-host-$preset-$TARGET.log" 2>&1 \
+        || { tail -30 "$LOCAL_TMP/build-host-$preset-$TARGET.log" >&2; exp_warn "host build $preset failed on $TARGET"; return 1; }
     echo "$T_HOST_SRC/build-$preset/bin"
 }
 
@@ -385,7 +397,8 @@ exp_accel_setup() {
 
 # exp_guest <arm> <rep> <image> <args> [nvme]...: one guest run, on a copy of
 # the image since run.py rewrites it. The console is left in EXP_LOG; EXP_VACCEL,
-# EXP_QEMU, EXP_GUEST_ENV and EXP_TIMEOUT adjust the run.
+# EXP_QEMU, EXP_GUEST_ENV, EXP_NVME_CACHE, EXP_NVME_AIO, EXP_NVME_MDTS and
+# EXP_TIMEOUT adjust the run.
 exp_guest() {
     local arm="$1" rep="$2" image="$3" args="$4"; shift 4
     local log="$EXP_RAW/$arm.$rep.log" run_img="$T_SCRATCH/run/$EXP_NAME-$arm.img" nvme="" d
@@ -402,7 +415,9 @@ exp_guest() {
         '$T_SCRATCH/bin/guest.sh' taskset -c $T_CORES timeout ${EXP_TIMEOUT:-900} \
             python3 '$T_SCRATCH/bin/run.py' --arch aarch64 ${EXP_VACCEL:+--vaccel} \
               ${EXP_QEMU:+--qemu-path '$EXP_QEMU'} -m ${EXP_MEM:-$T_MEM} -c ${EXP_VCPUS:-$T_VCPUS} \
-              --image-path '$run_img' $nvme --args \"$args\" < /dev/null" > "$log" 2>&1
+              --image-path '$run_img' $nvme ${EXP_NVME_CACHE:+--nvme-cache $EXP_NVME_CACHE} \
+              ${EXP_NVME_AIO:+--nvme-aio $EXP_NVME_AIO} ${EXP_NVME_MDTS:+--nvme-mdts $EXP_NVME_MDTS} \
+              --args \"$args\" < /dev/null" > "$log" 2>&1
     local rc=$?
     exp_swap_check "$swap_before"
     [ $rc -ne 0 ] && exp_warn "$arm rep $rep exited $rc (see $log)"

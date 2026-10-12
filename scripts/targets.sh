@@ -21,6 +21,14 @@ declare -A TGT_PLATFORM=(
     [joy]="orin"
 )
 
+# The CPU target of host builds, the guest's: ggml's native probe turns dot
+# products off on the Orin. Empty keeps the probe.
+declare -A TGT_CPU_ARCH=(
+    [local]=""
+    [orangepi]="armv8.2-a+dotprod+fp16"
+    [joy]="armv8.2-a+dotprod+fp16"
+)
+
 # Cores a measurement is pinned to: the big cores only on the RK3588.
 declare -A TGT_CORES=(
     [local]="0-3"

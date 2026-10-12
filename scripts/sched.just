@@ -51,7 +51,7 @@ rows() {   # <arm>
 '''
 
 [doc('the CPU row')]
-cpu target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" fills="2,4,8" chunk="64" arms="" name="sched-cpu":
+cpu target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" fills="2,4,8" chunk="64" arms="" name="sched-cpu" preset="cpu":
 	#!/usr/bin/env bash
 	source {{LIB}}; exp_target {{target}}
 	ARMS="{{arms}}" DEV=cpu
@@ -66,7 +66,7 @@ cpu target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" fills="2,4,8" chunk="64"
 	stage "$LOCAL_TMP/sched-cpu-$TARGET" "$pol" "{{fills}}"
 	data=$(exp_mkdata "$LOCAL_TMP/sched-cpu-$TARGET" "sched-cpu-$TARGET" 256M)
 	remote=$(exp_ship_image cpu "$(exp_build_guest cpu 0 1)")
-	bin=$(exp_build_host cpu llama-lros-serve) || exp_die "cannot build the host baseline"
+	bin=$(exp_build_host {{preset}} llama-lros-serve) || exp_die "cannot build the host baseline"
 	nt=$(exp_ncores) mask=$(exp_cpu_mask)
 	# The engines run one batch over n slots, their context holding the slots
 	# and as many parking sequences; their threads pinned one per core.
@@ -80,6 +80,8 @@ cpu target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" fills="2,4,8" chunk="64"
 	    host fifo "$slots $htrace --fifo"
 	    host priority-chunked "$slots $htrace --chunk {{chunk}}"
 	    guest lros "$lros --trace /root/traces/cpu-k$fill.trace"
+	    alone="$LOCAL_TMP/sched-cpu-$TARGET/traces/cpu-k$fill-alone.trace"
+	    [ -f "$alone" ] && EXPECT=$(grep -vc '^#' "$alone") && host alone "$slots ${htrace%.trace}-alone.trace --fifo"
 	  done
 	done
 	exp_finish
@@ -125,6 +127,8 @@ accel target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" fills="" chunk="64" ar
 	    host priority-chunked "$slots $htrace --chunk {{chunk}}"
 	    # LROS's device lease hands the device over at a layer or operator.
 	    EXP_VACCEL=1 EXP_GUEST_ENV="VIAI_PREEMPT=1" guest lros "$lros --trace /root/traces/$DEV-k$fill.trace"
+	    alone="$LOCAL_TMP/sched-accel-$TARGET/traces/$DEV-k$fill-alone.trace"
+	    [ -f "$alone" ] && EXPECT=$(grep -vc '^#' "$alone") && host alone "$slots ${htrace%.trace}-alone.trace --fifo"
 	  done
 	done
 	exp_finish

@@ -161,7 +161,7 @@ style_map = {
     'read':       {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': r'llama.cpp (read)', 'marker': 's'},
     'prefetch':   {'color': LROS_COLOR,  'hatch': LROS_HATCH,  'label': 'LROS (prefetcher)', 'marker': 'D'},
     # KV cache management
-    'recompute':  {'color': CPU_COLOR, 'hatch': CPU_HATCH, 'label': 'Recompute', 'marker': 'x'},
+    'recompute':  {'color': CPU_COLOR, 'hatch': CPU_HATCH, 'label': 'Recompute (CPU)', 'marker': 'x'},
     'swap':       {'color': ALT_COLOR, 'hatch': ALT_HATCH, 'label': 'Swap to disk', 'marker': 's'},
     'policy':     {'color': LROS_COLOR, 'hatch': LROS_HATCH, 'label': 'LROS (policy)', 'marker': 'D'},
     # scheduling strategies
@@ -178,6 +178,8 @@ style_map = {
     'wait':       {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'Wait', 'marker': 'o'},
     # motivation: preemption granularity
     'engine':     {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'llama-server', 'marker': 'o'},
+    'llamacpp':   {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'llama.cpp', 'marker': 'o'},
+    'recompute-gpu': {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Recompute (GPU)', 'marker': '^'},
     'fair':       {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': 'llama-server + fair share', 'marker': 'D'},
     'separate':   {'color': CPU_COLOR,   'hatch': CPU_HATCH,   'label': 'Two processes (kernel)', 'marker': '^'},
     'stopped':    {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Kernel + priority', 'marker': 'v'},
@@ -187,6 +189,12 @@ style_map = {
     'madv-rand':  {'color': ALT2_COLOR,  'hatch': ALT2_HATCH,  'label': 'mmap + MADV_RANDOM', 'marker': 'P'},
     'read-buf':   {'color': CPU_COLOR,   'hatch': CPU_HATCH,   'label': 'read into a buffer', 'marker': 'x'},
     'npu':        {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'NPU-resident copy', 'marker': '^'},
+    # motivation: weight paging with part of the model locked
+    'linux-mlock': {'color': lighten(LINUX_COLOR), 'hatch': '\\\\', 'label': 'llama.cpp + partial mlock', 'marker': 's'},
+    # motivation: KV cache eviction
+    'kv-state':   {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'llama.cpp (state file)', 'marker': 'o'},
+    'kv-all':     {'color': LROS_COLOR,  'hatch': LROS_HATCH,  'label': 'LROS, all evicted', 'marker': 'D'},
+    'kv-part':    {'color': lighten(LROS_COLOR), 'hatch': '..', 'label': 'LROS, 10% evicted', 'marker': 'D'},
     # motivation: an arrival into a running batch
     'alone':      {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Alone', 'marker': '^'},
     'gate':       {'color': LROS_COLOR,   'hatch': LROS_HATCH,   'label': 'Engine + held-out batch', 'marker': 'D'},
