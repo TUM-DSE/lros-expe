@@ -38,8 +38,8 @@
 # prefetched buffers; beyond 64 the fault handler reads the remaining
 # candidates synchronously, so a depth above 64 lengthens every fault rather
 # than adding lookahead. The recipe warns when that applies. The NVMe queue
-# (15 commands per vCPU, 512 KiB each at QEMU's default MDTS) bounds what is
-# really in flight on the device.
+# (15 commands per vCPU, 2 MiB each at --nvme-mdts 9) bounds what is really
+# in flight on the device.
 #
 # Host page cache. The model drive is attached with cache=none (O_DIRECT) so
 # QEMU does not serve the second pass over the model from host RAM, and the
@@ -178,13 +178,15 @@ swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_
 			taskset -c {{AFFINITY}} {{LLAMACPP_BIN}} $bench_args -m "$1" \
 			< /dev/null > "$3" 2> "$4"
 	}
+	# The guest has no load balancer: ggml's threads are pinned one per vcpu,
+	# or they all run on one core.
 	run_lros() { # model_path cache_kib buffer_bytes depth extra_opts out err
 		vmtouch -qe "$1"
 		timeout -k 10 {{SWAP_TIMEOUT}} \
 			taskset -c {{AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
 			--arch aarch64 -p kvm -c 4 -m {{size_mem}} --nogdb \
-			--image-path "$img" --emulated-nvme "$1" --nvme-cache none \
-			--args "--cache-size $2K --buffer-size $(($3 >> 10))K --prefetch-depth $4 $5 batched-bench -m nvme:1 $bench_args" \
+			--image-path "$img" --emulated-nvme "$1" --nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
+			--args "--cache-size $2K --buffer-size $(($3 >> 10))K --prefetch-depth $4 $5 batched-bench -m nvme:1 $bench_args -C f --cpu-strict 1 -Cb f --cpu-strict-batch 1" \
 			< /dev/null > "$6" 2> "$7"
 	}
 
