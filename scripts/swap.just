@@ -34,9 +34,9 @@
 # Prefetch. --prefetch-depth is chosen so that SWAP_INFLIGHT worth of buffers
 # is read ahead of every fault (128 x 128 KiB, 8 x 2 MiB for 16M). Note that
 # miniosv clamps the depth to prefetch_max (include/osv/mem/pagecache.hh, 512)
-# and parks at most pending_slots (core/mem/pagecache/internal.hh, 64)
-# prefetched buffers; beyond 64 the fault handler reads the remaining
-# candidates synchronously, so a depth above 64 lengthens every fault rather
+# and parks at most pending_slots (core/mem/pagecache/internal.hh, 256)
+# prefetched buffers; beyond 256 the fault handler reads the remaining
+# candidates synchronously, so a depth above 256 lengthens every fault rather
 # than adding lookahead. The recipe warns when that applies. The NVMe queue
 # (15 commands per vCPU, 2 MiB each at --nvme-mdts 9) bounds what is really
 # in flight on the device.
@@ -251,8 +251,8 @@ swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_
 				case "$spec" in *-nopin) extra="--pin-percent 0"; spec="${spec%-nopin}" ;; esac
 				buffer=$(to_bytes "$spec")
 				depth=$(( inflight / buffer ))
-				if [ "$depth" -gt 64 ]; then
-					echo "WARNING: depth $depth exceeds miniosv's pending_slots (64); the excess is read synchronously in the fault, see the header of scripts/swap.just" >&2
+				if [ "$depth" -gt 256 ]; then
+					echo "WARNING: depth $depth exceeds miniosv's pending_slots (256); the excess is read synchronously in the fault, see the header of scripts/swap.just" >&2
 				fi
 				run_lros "$path" $(( (quota + 1023) >> 10 )) "$buffer" "$depth" "$extra" "$out" "$err" || rc=$?
 				prefix="$ts,$run,$model,$disk,$config,$pct,$quota,,$buffer,$depth"
