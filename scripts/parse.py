@@ -17,7 +17,7 @@ RE_DONE_SLOT = re.compile(
     r"total\s+(?P<secs>[\d.]+) s, speed\s+(?P<tps>[\d.]+) t/s, "
     r"wait\s+(?P<waited>[\d.]+) s, preempted \d+x [\d.]+ s(?:, ttft\s+(?P<ttft>[\d.]+) s)?")
 RE_STARTED = re.compile(
-    r"\[t=\s*[\d.]+ s\] req\s+(?P<id>\d+) STARTED\s+seq\s+\d+ prio (?P<prio>\d+), "
+    r"\[t=\s*(?P<t>[\d.]+) s\] req\s+(?P<id>\d+) STARTED\s+seq\s+\d+ prio (?P<prio>\d+), "
     r"waited [\d.]+ s, task (?P<task>\d+) on (?P<cores>\d+) core\(s\)")
 # The QoS tail both engines append to their DONE line for a trace with apps.
 RE_QOS = re.compile(
@@ -70,19 +70,50 @@ def bench(text):
 # ttft_target_s: the first-token bound this request's prompt length allowed it
 # (the app's ttft_ms plus ttft_tok_ms per prompt token); 0 for none, empty in
 # older logs.
+# paused_s: how long the request's task had no core between the request's
+# start and its first token (the task's width lines): the part of ttft_s that
+# is neither the wait before the start (waited_s) nor computing. Empty in the
+# slot mode and in logs without width lines.
 APPS_HEADER = ("req,prio,task,cores_at_start,t_done_s,prompt,gen,secs,tps,waited_s,ttft_s,"
                "app,sess,turn,tpot_ms,tpot_p95_ms,tpot_max_ms,late,gaps,e2e_s,deadline,buffer_ms,"
-               "ttft_target_s")
+               "ttft_target_s,paused_s")
+
+
+# The seconds of [t0, t1] a task spent at width 0, from its width changes
+# [(t, cores)] in the order logged; None without any.
+def paused(changes, t0, t1):
+    if not changes:
+        return None
+    total = 0.0
+    cores, since = None, t0
+    for t, c in changes:
+        if t <= t0:
+            cores = c
+            continue
+        if t >= t1:
+            break
+        if cores == 0:
+            total += t - since
+        cores, since = c, t
+    if cores == 0:
+        total += t1 - since
+    return total
 
 
 def apps(text):
     rows = []
     started = {int(m["id"]): m for m in RE_STARTED.finditer(text)}
+    widths = {}
+    for line in text.splitlines():
+        m = RE_WIDTH.search(line)
+        if m and m["task"]:
+            widths.setdefault(m["task"], []).append((float(m["t"]), int(m["cores"])))
     for line in text.splitlines():
         q = RE_QOS.search(line)
         if not q:
             continue
         m = RE_DONE_SLOT.search(line)
+        pause = None
         if m:
             head = (m["id"], m["prio"], -1, -1)
         else:
@@ -91,11 +122,17 @@ def apps(text):
                 continue
             s = started.get(int(m["id"]))
             head = (m["id"], s["prio"] if s else -1, s["task"] if s else -1, s["cores"] if s else -1)
+            if s and m["ttft"]:
+                # The first token came ttft after the arrival, which was
+                # waited before the start.
+                t0 = float(s["t"])
+                pause = paused(widths.get(s["task"]), t0, t0 - float(m["waited"]) + float(m["ttft"]))
         rows.append(head + (m["t"], m["prompt"], m["gen"], m["secs"], m["tps"], m["waited"],
                             m["ttft"] or -1, q["app"], q["sess"], q["turn"], q["tpot"],
                             q["tpot_p95"], q["tpot_max"], q["late"], q["gaps"], q["e2e"],
                             q["deadline"], q["buffer"] if q["buffer"] is not None else "",
-                            q["ttft_target"] if q["ttft_target"] is not None else ""))
+                            q["ttft_target"] if q["ttft_target"] is not None else "",
+                            f"{pause:.2f}" if pause is not None else ""))
     return [",".join(str(v) for v in r) for r in rows]
 
 
