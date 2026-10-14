@@ -1,6 +1,6 @@
 [submodule "llama.cpp-rknn"]
 	path = llama.cpp-rknn
-	url = git@gitlab.lrz.de:00000000014A6BD7/llama.cpp-rknn.git
+	url = git@gitlab.lrz.de:tum-dse/llama.cpp-rknn.git
 [submodule "miniosv"]
 	path = miniosv
 	url = git@github.com:TUM-DSE/miniosv.git

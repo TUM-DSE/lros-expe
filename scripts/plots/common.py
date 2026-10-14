@@ -190,7 +190,7 @@ style_map = {
     'read-buf':   {'color': CPU_COLOR,   'hatch': CPU_HATCH,   'label': 'read into a buffer', 'marker': 'x'},
     'npu':        {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'NPU-resident copy', 'marker': '^'},
     # motivation: weight paging with part of the model locked
-    'linux-mlock': {'color': lighten(LINUX_COLOR), 'hatch': '\\\\', 'label': 'llama.cpp + partial mlock', 'marker': 's'},
+    'linux-mlock': {'color': lighten(LINUX_COLOR, 0.8), 'hatch': '\\\\', 'label': 'Partial mlock', 'marker': 's'},
     # motivation: KV cache eviction
     'kv-state':   {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'llama.cpp (state file)', 'marker': 'o'},
     'kv-all':     {'color': LROS_COLOR,  'hatch': LROS_HATCH,  'label': 'LROS, all evicted', 'marker': 'D'},
