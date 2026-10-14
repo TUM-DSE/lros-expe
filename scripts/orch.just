@@ -274,7 +274,7 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 					taskset -c {{ORCH_AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
 					--arch aarch64 -p kvm -c 4 -m {{size_mem}} --nogdb \
 					--image-path "$img" --emulated-nvme "$data" --emulated-nvme "$model_a" --emulated-nvme "$model_b" \
-					--nvme-cache none \
+					--nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
 					--args "--cache-size $cache {{ORCH_STREAM_ARGS}} $args" \
 					< /dev/null > "$out" 2> "$err" &
 				;;
