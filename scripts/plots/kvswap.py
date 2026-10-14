@@ -391,7 +391,10 @@ def main():
     out_dir = args.out_dir or kvswap_plots_dir
     for model in sorted(df["model"].unique()):
         sub = df[df["model"] == model]
-        configs = ordered(sub[sub["keep_pct"] < 0]["config"], CONFIG_ORDER)
+        # The ordinary runs' configs, and the mechanisms of the partial rows:
+        # a CSV of `just kvswap_partial` alone has no ordinary LROS rows.
+        configs = ordered(pd.concat([sub[sub["keep_pct"] < 0]["config"],
+                                     sub[sub["keep_pct"] >= 0]["base"]]), CONFIG_ORDER)
         if args.configs:
             configs = [c for c in args.configs.split(",")]
         full = sub[(sub["keep_pct"] < 0) & sub["config"].isin(configs)]

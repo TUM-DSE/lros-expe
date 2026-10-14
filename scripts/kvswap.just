@@ -10,14 +10,21 @@
 #
 # Manual form (the guest):
 #   python3 miniosv/scripts/run.py --arch aarch64 -p kvm -c 4 -m 8G --nogdb \
-#     --image-path miniosv/build/cpu.aarch64/loader.img \
+#     --image-path miniosv/build/paging.aarch64/loader.img \
 #     --emulated-nvme /scratch/orangepi/models/Llama-3.2-1B-Instruct-f16.gguf \
-#     --emulated-nvme /scratch/orangepi/kvswap/area.img --nvme-cache none \
+#     --emulated-nvme /scratch/orangepi/kvswap/area.img \
+#     --nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
 #     --args "--kv-swap nvme:2 --kv-page-size 4K kv-bench -m nvme:1 -fa -t 4 --lros \
 #             --lengths 128,256,512 --reps 2 --swap page --restore bulk"
 # and the host:
 #   llama-kv-bench -m model.gguf -fa -t 4 --lengths 128,256,512 --reps 2 \
 #     --swap file --swap-file /scratch/orangepi/kvswap/state.bin
+#
+# The guest image is the variant's build dir, by default paging.aarch64 (the
+# one scripts/swap.just uses; its build command is in that file's header).
+# The weights are resident here, so its weight-paging policy plays no part.
+# The emulated drives run on io_uring with 2 MiB commands (--nvme-aio
+# io_uring --nvme-mdts 9), as in the weight sweep.
 #
 # Dimensions (all swept, innermost last):
 #   run     repetition of the whole boot / process
@@ -51,9 +58,10 @@
 #                           at the one length KVSWAP_PARTIAL_LENGTHS.
 #
 # Both sides use flash attention (-fa): with the KV paged, V is stored
-# transposed without it and every token touches every page of V. The guest
-# computes on lros workers (--lros); ggml's own threadpool is not placed on
-# the cores by the current miniosv.
+# transposed without it and every token touches every page of V. Both compute
+# on the same four A76 cores (KVSWAP_AFFINITY): the guest on lros workers
+# (--lros), which lros pins one per vcpu; the host on ggml's threads, left to
+# the Linux scheduler within those cores.
 #
 # Output: bench/out/kvswap/<timestamp>/kvswap.csv, one row per (N, rep) of
 # each run, and the console logs under logs/<model>/<disk>/<config>/run<n>.
@@ -86,11 +94,13 @@ KVSWAP_AREA := "1G"
 #     build linux cpu-clang
 KVSWAP_LINUX_BIN := LROS_PATH + "/app/llama.cpp/build-cpu-clang/bin/llama-kv-bench"
 KVSWAP_BENCH_ARGS := "-fa -t 4"
+# Host cpus for both sides: the four A76 cores.
+KVSWAP_AFFINITY := "4-7"
 # Wall-clock cap per run (seconds). One run prefills the sum of the lengths,
 # reps times: about 8k tokens x 2 at 80 t/s is 4 minutes, plus the swaps.
 KVSWAP_TIMEOUT := "1800"
 
-kvswap_sweep n_runs="1" size_mem="8G" variant="cpu" models=KVSWAP_MODELS disks=KVSWAP_DISKS configs=KVSWAP_CONFIGS lengths=KVSWAP_LENGTHS:
+kvswap_sweep n_runs="1" size_mem="8G" variant="paging" models=KVSWAP_MODELS disks=KVSWAP_DISKS configs=KVSWAP_CONFIGS lengths=KVSWAP_LENGTHS:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
@@ -103,7 +113,7 @@ kvswap_sweep n_runs="1" size_mem="8G" variant="cpu" models=KVSWAP_MODELS disks=K
 
 	case " {{configs}} " in *" lros-"*)
 		if [ ! -f "$img" ]; then
-			echo "Missing $img -- build it first: just build lros {{variant}}" >&2
+			echo "Missing $img -- build it first, see the headers of scripts/kvswap.just and scripts/swap.just" >&2
 			exit 1
 		fi
 	esac
@@ -170,7 +180,7 @@ kvswap_sweep n_runs="1" size_mem="8G" variant="cpu" models=KVSWAP_MODELS disks=K
 		vmtouch -qe "$1"
 		rm -f "$2"
 		timeout -k 10 {{KVSWAP_TIMEOUT}} \
-			taskset -c {{AFFINITY}} {{KVSWAP_LINUX_BIN}} -m "$1" $bench_args \
+			taskset -c {{KVSWAP_AFFINITY}} {{KVSWAP_LINUX_BIN}} -m "$1" $bench_args \
 			--swap file --swap-file "$2" \
 			< /dev/null > "$3" 2> "$4"
 	}
@@ -178,9 +188,10 @@ kvswap_sweep n_runs="1" size_mem="8G" variant="cpu" models=KVSWAP_MODELS disks=K
 		vmtouch -qe "$1"
 		vmtouch -qe "$2"
 		timeout -k 10 {{KVSWAP_TIMEOUT}} \
-			taskset -c {{AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
+			taskset -c {{KVSWAP_AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
 			--arch aarch64 -p kvm -c 4 -m {{size_mem}} --nogdb \
-			--image-path "$img" --emulated-nvme "$1" --emulated-nvme "$2" --nvme-cache none \
+			--image-path "$img" --emulated-nvme "$1" --emulated-nvme "$2" \
+			--nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
 			--args "--kv-swap nvme:2 --kv-page-size $(($3 >> 10))K kv-bench -m nvme:1 --lros $bench_args --swap page --restore $4 ${5:+--keep $5}" \
 			< /dev/null > "$6" 2> "$7"
 	}
@@ -189,8 +200,8 @@ kvswap_sweep n_runs="1" size_mem="8G" variant="cpu" models=KVSWAP_MODELS disks=K
 		echo "timestamp $ts"
 		echo "image $img"
 		echo "host binary {{KVSWAP_LINUX_BIN}}"
-		echo "bench args $bench_args"
-		echo "guest memory {{size_mem}}, cpus {{AFFINITY}}"
+		echo "bench args $bench_args; guest --lros"
+		echo "guest memory {{size_mem}}, cpus {{KVSWAP_AFFINITY}}, drives io_uring with MDTS 9"
 		echo "area {{KVSWAP_AREA}}, timeout {{KVSWAP_TIMEOUT}}s"
 		echo "models {{models}}"; echo "disks {{disks}}"; echo "configs {{configs}}"; echo "lengths {{lengths}}"
 		echo "git $(git -C {{proot}} rev-parse --short HEAD) miniosv $(git -C {{LROS_PATH}} rev-parse --short HEAD) app $(git -C {{LROS_PATH}}/app/llama.cpp rev-parse --short HEAD)"
@@ -251,4 +262,4 @@ kvswap_sweep n_runs="1" size_mem="8G" variant="cpu" models=KVSWAP_MODELS disks=K
 # The partial swap-out experiment: the same sweep over KVSWAP_PARTIAL_CONFIGS
 # at one context length, i.e. how the swap costs shrink when 10, 50 or 90% of
 # the KV may stay.
-kvswap_partial n_runs="1" size_mem="8G" variant="cpu" models=KVSWAP_MODELS disks=KVSWAP_DISKS lengths=KVSWAP_PARTIAL_LENGTHS: (kvswap_sweep n_runs size_mem variant models disks KVSWAP_PARTIAL_CONFIGS lengths)
+kvswap_partial n_runs="1" size_mem="8G" variant="paging" models=KVSWAP_MODELS disks=KVSWAP_DISKS lengths=KVSWAP_PARTIAL_LENGTHS: (kvswap_sweep n_runs size_mem variant models disks KVSWAP_PARTIAL_CONFIGS lengths)
