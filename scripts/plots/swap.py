@@ -2,9 +2,10 @@
 """Weight paging under memory pressure, from a `just swap_sweep` run.
 
 The real-data counterpart of mock_memory.py's mem-weights-tp.pdf: decode
-throughput against the memory quota as a fraction of the model size, one line
-per paging configuration (llama.cpp mmap on Linux, the LROS prefetcher with
-4K and 2M buffers), one panel per disk the model was read from.
+throughput against the memory quota as a fraction of the model size, one bar
+per paging configuration (llama.cpp mmap on Linux; LROS with a buffer per
+tensor piece, with and without layer prefetch; LROS with fixed buffers), one
+panel per disk the model was read from.
 
   python3 swap.py [swap.csv ...] [-o OUT_DIR] [--metric s_tg|s_pp|s] [--ntg N]
 
@@ -22,15 +23,21 @@ import sys
 
 from common import *
 
-# The sweep's config names, mapped onto the paper's series identities. Buffer
-# sizes differ by hatch; the -nopin arms (--pin-percent 0, S3-FIFO over the
-# whole cache instead of a pinned 75% prefix) take a lighter LROS shade.
+# The sweep's config names, mapped onto the paper's series identities. The
+# per-tensor arms are the full LROS colour, the layer prefetch hatched the
+# other way round from mmap, which stays readable in the small legend swatch; fixed
+# buffer sizes differ by hatch; the -nopin arms (--pin-percent 0, S3-FIFO over
+# the whole cache) take a lighter LROS shade.
 NOPIN_COLOR = lighten(LROS_COLOR, 0.45)
-# Configurations left out of the figures even when the data has them: the
-# no-pin arms add nothing over the pinned ones. --configs overrides this.
-HIDDEN_CONFIGS = {"lros-128K-nopin", "lros-2M-nopin"}
+# Configurations left out of the figures even when the data has them; older
+# sweeps carry arms the current one dropped. --configs overrides this.
+HIDDEN_CONFIGS = {"lros-128K-nopin"}
 CONFIG_STYLE = {
     "linux-mmap": ("mmap", {}),
+    # The arm the speedup is printed for comes right after mmap, so that the
+    # label sits between the two bars it compares.
+    "lros-tensor-layer": ("prefetch", {"label": "LROS (per tensor, layer prefetch)", "hatch": "\\\\"}),
+    "lros-tensor": ("prefetch", {"label": "LROS (per tensor)"}),
     "lros-4K": ("prefetch", {"label": "LROS (prefetch, 4K)", "hatch": ".."}),
     "lros-128K": ("prefetch", {"label": "LROS (prefetch, 128K)", "hatch": ".."}),
     "lros-2M": ("prefetch", {"label": "LROS (prefetch, 2M)"}),
@@ -38,6 +45,8 @@ CONFIG_STYLE = {
     "lros-2M-nopin": ("prefetch", {"label": "LROS (2M, no pin)", "color": NOPIN_COLOR}),
 }
 CONFIG_ORDER = list(CONFIG_STYLE)
+# The arm the speedup over mmap is printed for: the first of these the data has.
+HEADLINE_CONFIGS = ["lros-tensor-layer", "lros-tensor", "lros-2M"]
 DISK_LABEL = {"nvme": "NVMe", "emmc": "eMMC"}
 DISK_ORDER = ["nvme", "emmc"]
 METRIC_LABEL = {"s_tg": "Decode throughput (tok/s)",
@@ -78,6 +87,8 @@ def parse_args():
                    help="use the table rows with this many generated tokens (default 16)")
     p.add_argument("--configs", default=None,
                    help="comma-separated configs to plot, in order (default: all present)")
+    p.add_argument("--height", type=float, default=fig_height,
+                   help=f"figure height in inches (default {fig_height:g}, as every plot)")
     return p.parse_args()
 
 
@@ -93,7 +104,8 @@ def load(paths, metric, ntg):
     return df
 
 
-def plot_model(df, disks, metric, out_dir, name, only_configs=None, single_column=False):
+def plot_model(df, disks, metric, out_dir, name, only_configs=None, single_column=False,
+               height=fig_height):
     """One figure with a panel per disk in `disks`, saved as `name` in
     `out_dir`; single_column fits the panels into one column width."""
     df = df[df["disk"].isin(disks)]
@@ -110,7 +122,7 @@ def plot_model(df, disks, metric, out_dir, name, only_configs=None, single_colum
     offset = {cfg: (i - len(configs) / 2 + 0.5) * width for i, cfg in enumerate(configs)}
 
     fig_w = figwidth_half if single_column else figwidth_half * len(disks)
-    fig, axes = plt.subplots(1, len(disks), sharey=True, figsize=(fig_w, fig_height))
+    fig, axes = plt.subplots(1, len(disks), sharey=True, figsize=(fig_w, height))
     axes = np.atleast_1d(axes)
 
     # The y axis is sized for the bars under memory pressure. A bar for a quota
@@ -155,17 +167,18 @@ def plot_model(df, disks, metric, out_dir, name, only_configs=None, single_colum
                             bbox=dict(boxstyle="square,pad=0.15", facecolor="white",
                                       edgecolor="none", alpha=0.85))
 
-        # The headline: prefetcher (2M) against mmap under memory pressure,
-        # placed between the two bars it compares.
-        if "lros-2M" in means and "linux-mmap" in means:
+        # The headline: the best LROS arm the data has against mmap under
+        # memory pressure, placed between the two bars it compares.
+        best = next((c for c in HEADLINE_CONFIGS if c in means), None)
+        if best and "linux-mmap" in means:
             for k in np.flatnonzero(~fits):
-                hi, lo = means["lros-2M"][k], means["linux-mmap"][k]
+                hi, lo = means[best][k], means["linux-mmap"][k]
                 if np.isnan(hi) or np.isnan(lo) or lo <= 0:
                     continue
                 # Above everything the label spans, error bars included.
-                i0, i1 = sorted((configs.index("linux-mmap"), configs.index("lros-2M")))
+                i0, i1 = sorted((configs.index("linux-mmap"), configs.index(best)))
                 clear = max(tops[c][k] for c in configs[i0:i1 + 1])
-                ax.text(x[k] + (offset["lros-2M"] + offset["linux-mmap"]) / 2,
+                ax.text(x[k] + (offset[best] + offset["linux-mmap"]) / 2,
                         clear + ylim * 0.03, speedup_label(hi / lo),
                         ha="center", va="bottom", fontsize=FONTSIZE_ANNOTATION, zorder=4)
 
@@ -216,8 +229,10 @@ for m in models:
             sorted(set(sub["disk"]) - set(DISK_ORDER))
     model_dir = os.path.join(out_dir, FIGURE, os.path.splitext(m)[0])
     column_dir = os.path.join(model_dir, "single-column")
-    plot_model(sub, disks, args.metric, model_dir, FIGURE, only_configs=only)
+    plot_model(sub, disks, args.metric, model_dir, FIGURE, only_configs=only, height=args.height)
     if len(disks) > 1:
-        plot_model(sub, disks, args.metric, column_dir, FIGURE, only_configs=only, single_column=True)
+        plot_model(sub, disks, args.metric, column_dir, FIGURE, only_configs=only, single_column=True,
+                   height=args.height)
     for d in disks:
-        plot_model(sub, [d], args.metric, column_dir, f"{FIGURE}_{d}", only_configs=only, single_column=True)
+        plot_model(sub, [d], args.metric, column_dir, f"{FIGURE}_{d}", only_configs=only, single_column=True,
+                   height=args.height)

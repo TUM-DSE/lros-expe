@@ -1,11 +1,22 @@
 # Weight-swapping sweep: how well does inference hold up when the model does
 # not fit in memory and has to be paged in from disk?
 #
-# Manual form of the measurement (what this recipe automates):
+# Manual form of the measurement (what this recipe automates), for the
+# lros-tensor-layer arm at a 50% quota:
 #   just MODEL=/scratch/orangepi/models/Llama-3.2-1B-Instruct-f16.gguf \
-#     run_lros_stdout miniosv/build/cpu.aarch64/loader.img 8G \
-#     "--cache-size 1182M --buffer-size 128K --prefetch-depth 128 \
-#      batched-bench -m nvme:1 -npl 1 -ntg 1,16 -npp 128 -t 4"
+#     run_lros_stdout miniosv/build/paging.aarch64/loader.img 8G \
+#     "--cache-size 1182M --pin-percent 1 --per-tensor-buffers --layer-prefetch \
+#      batched-bench -m nvme:1 -npl 1 -ntg 1,16 -npp 128 -t 4 \
+#      -C f --cpu-strict 1 -Cb f --cpu-strict-batch 1"
+#
+# The guest image is the variant's build dir, by default paging.aarch64, built
+# from the current miniosv and app/llama.cpp trees:
+#   nix develop ./miniosv --command make -C miniosv -j8 app=app/llama.cpp \
+#     arch=aarch64 out=build/paging.aarch64 conf_vaccel=0 conf_llama_sgemm=1
+# The Linux side runs llama-batched-bench from the same llama.cpp tree, built
+# with the same clang major as the guest (in the dev shell of this repo):
+#   nix develop --command cmake --build miniosv/app/llama.cpp/build-cpu-clang \
+#     --target llama-batched-bench
 #
 # Dimensions (all swept, innermost last):
 #   run     repetition, so drift shows up as spread rather than as a trend
@@ -16,13 +27,29 @@
 #   quota   percent of the model file size the paging layer may keep resident
 #   config  linux-mmap  llama-batched-bench on the host, model mmap'ed, in a
 #                       cgroup whose MemoryMax caps anon + page cache
-#           lros-<buf>  miniosv, page cache buffers of <buf> (128K, 2M, ...),
-#                       with the default policy: --pin-percent 75 holds the
-#                       first 75% of the cache as a resident prefix of the
-#                       model and streams the rest through what is left
-#           lros-<buf>-nopin
-#                       the same with --pin-percent 0, i.e. the S3-FIFO
-#                       policy over the whole cache
+#           lros-tensor miniosv, a page cache buffer per tensor piece (a
+#                       tensor's own pages, at most 1/16 of the cache; the
+#                       pages two tensors share are pieces of their own, read
+#                       together with either neighbour). The first pieces of
+#                       the model's use order are pinned, the rest is
+#                       streamed through a window of three of the largest
+#                       pieces plus 16 MiB.
+#           lros-tensor-layer
+#                       the same with --layer-prefetch: on entering a layer,
+#                       the pieces that follow in the use order are read
+#                       ahead within the window
+#           lros-<buf>[-nopin]
+#                       page cache buffers of a fixed <buf> (128K, 2M, ...)
+#                       with SWAP_INFLIGHT of sequential read-ahead. Pinning
+#                       needs the use order, which fixed buffers never
+#                       complete, so only the -nopin form (--pin-percent 0,
+#                       S3-FIFO over the whole cache) is a sensible arm; the
+#                       pinned form ends up as a plain FIFO.
+#
+# Both sides compute on the same four A76 cores (SWAP_AFFINITY). In the guest
+# ggml's threads are pinned one per vcpu: it has no load balancer, so
+# unpinned threads would all run on one vcpu. On the host they are left to
+# the Linux scheduler within those cores.
 #
 # Quota accounting. On miniosv --cache-size bounds only the model's page
 # cache, so the quota is used as is. A cgroup MemoryMax also counts everything
@@ -31,8 +58,9 @@
 # an unlimited calibration run of the same command, measured once per model,
 # plus SWAP_LINUX_MARGIN for the kernel memory the cgroup charges as well.
 #
-# Prefetch. --prefetch-depth is chosen so that SWAP_INFLIGHT worth of buffers
-# is read ahead of every fault (128 x 128 KiB, 8 x 2 MiB for 16M). Note that
+# Prefetch, for the fixed-buffer arms. --prefetch-depth is chosen so that
+# SWAP_INFLIGHT worth of buffers is read ahead of every fault (128 x 128 KiB,
+# 8 x 2 MiB for 16M). The per-tensor arms have no such read-ahead. Note that
 # miniosv clamps the depth to prefetch_max (include/osv/mem/pagecache.hh, 512)
 # and parks at most pending_slots (core/mem/pagecache/internal.hh, 256)
 # prefetched buffers; beyond 256 the fault handler reads the remaining
@@ -65,18 +93,22 @@ SWAP_EMMC_MODELS_DIR := models_dir
 SWAP_MODELS := "Llama-3.2-1B-Instruct-f16.gguf Llama-3.2-1B-Instruct-Q4_K_M.gguf qwen2.5-1.5b-instruct-fp16.gguf"
 
 SWAP_DISKS := "nvme emmc"
-# The -nopin arms are left out of the default: they add nothing over the
-# pinned ones (measured 2026-09-17); the recipe still accepts them by name.
-SWAP_CONFIGS := "linux-mmap lros-128K lros-2M"
+# The per-tensor arms with and without layer prefetch, and fixed 2M buffers as
+# the reference for what per-tensor buffers and pinning add.
+SWAP_CONFIGS := "linux-mmap lros-tensor lros-tensor-layer lros-2M-nopin"
 SWAP_QUOTAS := "110 80 50 10"
 SWAP_INFLIGHT := "16M"
 SWAP_LINUX_MARGIN := "64M"
 SWAP_BENCH_ARGS := "-npl 1 -ntg 1,16 -npp 128 -t 4"
+# The Linux side: the guest's llama.cpp tree, built with clang 20.
+SWAP_LINUX_BIN := LROS_PATH + "/app/llama.cpp/build-cpu-clang/bin/llama-batched-bench"
+# Host cpus for both sides: the four A76 cores.
+SWAP_AFFINITY := "4-7"
 # Wall-clock cap per run (seconds); a wedged guest must not stall the sweep.
 # The slowest completed run so far (eMMC, 50%, 2M) took about 5 minutes.
 SWAP_TIMEOUT := "600"
 
-swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_DISKS configs=SWAP_CONFIGS quotas=SWAP_QUOTAS:
+swap_sweep n_runs="3" size_mem="8G" variant="paging" models=SWAP_MODELS disks=SWAP_DISKS configs=SWAP_CONFIGS quotas=SWAP_QUOTAS:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
@@ -90,16 +122,17 @@ swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_
 
 	case " {{configs}} " in *" lros-"*)
 		if [ ! -f "$img" ]; then
-			echo "Missing $img -- build it first: just build lros {{variant}}" >&2
+			echo "Missing $img -- build it first, see the header of scripts/swap.just" >&2
 			exit 1
 		fi
 	esac
 	case " {{configs}} " in *" linux-"*)
-		if [ ! -x "{{LLAMACPP_BIN}}" ]; then
-			echo "Missing {{LLAMACPP_BIN}} -- build it first: just build linux cpu" >&2
+		if [ ! -x "{{SWAP_LINUX_BIN}}" ]; then
+			echo "Missing {{SWAP_LINUX_BIN}} -- build it first, see the header of scripts/swap.just" >&2
 			exit 1
 		fi
 	esac
+	guest_pin="-C f --cpu-strict 1 -Cb f --cpu-strict-batch 1"
 
 	# "16M" -> bytes
 	to_bytes() {
@@ -155,7 +188,7 @@ swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_
 	calibrate_linux() { # model_path log
 		local peak=0 pid rss
 		vmtouch -qe "$1"
-		taskset -c {{AFFINITY}} {{LLAMACPP_BIN}} $bench_args -m "$1" > "$2" 2>&1 &
+		taskset -c {{SWAP_AFFINITY}} {{SWAP_LINUX_BIN}} $bench_args -m "$1" > "$2" 2>&1 &
 		pid=$!
 		while kill -0 "$pid" 2>/dev/null; do
 			rss=$(awk '/^RssAnon:/ { print $2 }' "/proc/$pid/status" 2>/dev/null || true)
@@ -175,27 +208,25 @@ swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_
 		vmtouch -qe "$1"
 		systemd-run --user --scope -p MemoryMax="$2" -p MemorySwapMax=0 --quiet -- \
 			timeout -k 10 {{SWAP_TIMEOUT}} \
-			taskset -c {{AFFINITY}} {{LLAMACPP_BIN}} $bench_args -m "$1" \
+			taskset -c {{SWAP_AFFINITY}} {{SWAP_LINUX_BIN}} $bench_args -m "$1" \
 			< /dev/null > "$3" 2> "$4"
 	}
-	# The guest has no load balancer: ggml's threads are pinned one per vcpu,
-	# or they all run on one core.
-	run_lros() { # model_path cache_kib buffer_bytes depth extra_opts out err
+	run_lros() { # model_path cache_kib paging_opts out err
 		vmtouch -qe "$1"
 		timeout -k 10 {{SWAP_TIMEOUT}} \
-			taskset -c {{AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
+			taskset -c {{SWAP_AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
 			--arch aarch64 -p kvm -c 4 -m {{size_mem}} --nogdb \
 			--image-path "$img" --emulated-nvme "$1" --nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
-			--args "--cache-size $2K --buffer-size $(($3 >> 10))K --prefetch-depth $4 $5 batched-bench -m nvme:1 $bench_args -C f --cpu-strict 1 -Cb f --cpu-strict-batch 1" \
-			< /dev/null > "$6" 2> "$7"
+			--args "--cache-size $2K $3 batched-bench -m nvme:1 $bench_args $guest_pin" \
+			< /dev/null > "$4" 2> "$5"
 	}
 
 	{
 		echo "timestamp $ts"
 		echo "image $img"
-		echo "host binary {{LLAMACPP_BIN}}"
-		echo "bench args $bench_args"
-		echo "guest memory {{size_mem}}, cpus {{AFFINITY}}"
+		echo "host binary {{SWAP_LINUX_BIN}}"
+		echo "bench args $bench_args; guest $guest_pin"
+		echo "guest memory {{size_mem}}, cpus {{SWAP_AFFINITY}}"
 		echo "inflight {{SWAP_INFLIGHT}}, linux margin {{SWAP_LINUX_MARGIN}}, timeout {{SWAP_TIMEOUT}}s"
 		echo "models {{models}}"; echo "disks {{disks}}"; echo "configs {{configs}}"; echo "quotas {{quotas}}"
 		echo "git $(git -C {{proot}} rev-parse --short HEAD) miniosv $(git -C {{LROS_PATH}} rev-parse --short HEAD)"
@@ -244,6 +275,14 @@ swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_
 				run_linux "$path" "$limit" "$out" "$err" || rc=$?
 				prefix="$ts,$run,$model,$disk,$config,$pct,$limit,${linux_overhead[$model]},,"
 				;;
+			lros-tensor|lros-tensor-layer)
+				# A buffer per tensor piece, pinned by the use order; no read-ahead
+				# of its own, the layer prefetch in the -layer arm.
+				opts="--pin-percent 1 --per-tensor-buffers"
+				[ "$config" = lros-tensor-layer ] && opts="$opts --layer-prefetch"
+				run_lros "$path" $(( (quota + 1023) >> 10 )) "$opts" "$out" "$err" || rc=$?
+				prefix="$ts,$run,$model,$disk,$config,$pct,$quota,,,0"
+				;;
 			lros-*)
 				# lros-<buf>[-nopin]: the suffix selects --pin-percent 0
 				spec="${config#lros-}"
@@ -254,7 +293,8 @@ swap_sweep n_runs="3" size_mem="8G" variant="cpu" models=SWAP_MODELS disks=SWAP_
 				if [ "$depth" -gt 256 ]; then
 					echo "WARNING: depth $depth exceeds miniosv's pending_slots (256); the excess is read synchronously in the fault, see the header of scripts/swap.just" >&2
 				fi
-				run_lros "$path" $(( (quota + 1023) >> 10 )) "$buffer" "$depth" "$extra" "$out" "$err" || rc=$?
+				opts="--buffer-size $(( buffer >> 10 ))K --prefetch-depth $depth $extra"
+				run_lros "$path" $(( (quota + 1023) >> 10 )) "$opts" "$out" "$err" || rc=$?
 				prefix="$ts,$run,$model,$disk,$config,$pct,$quota,,$buffer,$depth"
 				;;
 			*)
