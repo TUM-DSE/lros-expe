@@ -150,6 +150,60 @@ paging-lros target="joy" models=PAGING_MODELS pcts="10,25,50,75" ntg="128" polic
 	done
 	exp_finish
 
+[doc('the paging runs in the LROS guest with VIAI, ngl layers offloaded to the GPU, the weight budget covering both copies')]
+paging-lros-gpu target="joy" model=DENSE pcts="75,25,10" ngls="0,4,8,12,16" ntg="64" name="mot-paging-lros-gpu" aio="io_uring" mdts="9" stream="0":
+	#!/usr/bin/env bash
+	source {{LIB}}; exp_target {{target}}
+	exp_setup
+	exp_begin {{name}} "exp,target,platform,model,ngl,quota_pct,budget_mb,dev_mb,cache_mb,rep,status,pp,tg,t_pp,s_pp,t_tg,s_tg,faults,hits,read_mb,evicted"
+	export EXP_TIMEOUT=${EXP_TIMEOUT:-3600} EXP_NVME_CACHE=none EXP_NVME_AIO="{{aio}}" EXP_NVME_MDTS="{{mdts}}"
+	remote=$(exp_ship_image viai-stats "$(EXP_GUEST_CONF='conf_viai=1 conf_pagecache_stats=1' exp_build_guest viai-stats 0 1)")
+	prompt="The history of the printing press begins in the fifteenth century, when Johannes Gutenberg combined movable metal type, oil-based ink and a screw press adapted from wine making. Within fifty years presses operated in more than two hundred cities across Europe, and the cost of books fell sharply. Scholars, merchants and reformers used the new medium to spread ideas faster than any authority could control. Explain in detail how the printing press changed science, religion, politics and everyday life, and compare its effects with those of the internet."
+	mkdir -p "$LOCAL_TMP/paging-lros-gpu"; printf '%s' "$prompt" > "$LOCAL_TMP/paging-lros-gpu/prompt.txt"
+	data=$(exp_mkdata "$LOCAL_TMP/paging-lros-gpu" paging-lros-gpu 16M)
+	cli="llama-cli -m nvme:2 -no-cnv -f /root/prompt.txt -n {{ntg}} --ignore-eos --seed 1 -c 1024 -t $(exp_ncores) -C $(printf %x $(( (1 << $(exp_ncores)) - 1 ))) --cpu-strict 1"
+	# The offloaded layers live in device memory that QEMU holds on the host,
+	# outside the guest. The budget for the weights is pct of the model file,
+	# as under the Linux cap, and covers both copies: the guest's cache gets
+	# what the device copy leaves.
+	# With stream=1, VIAI also runs the matmuls whose weights stay in the guest,
+	# and the scheduler copies those weights to the device at every evaluation.
+	# run <tag> <ngl> <pct> <cache MiB>
+	run() {
+	  local env=""
+	  [ "{{stream}}" != 0 ] && env="--env VIAI_STREAM=1"
+	  EXP_VACCEL=1 exp_guest "${model%.gguf}-ngl$2-q$3" "$rep" "$remote" \
+	    "$env --cache-size $4M --pin-percent 1 --per-tensor-buffers $cli -ngl $2" "$data" "$(exp_model $model)"
+	  dev=$(tr -d '\r' < "$EXP_LOG" | awk '/model buffer size/ && !/CPU/ {s += $(NF-1)} END {printf "%d", s}')
+	  local r st status=ok
+	  r=$(awk '/prompt eval time/ {pt=$6; pp=$9} / +eval time/ && !/prompt/ {tt=$5; tg=$8}
+	    END {if (pp && tg) printf "%d,%d,%.3f,%.2f,%.3f,%.2f", pp, tg, pt/1000, pp*1000/pt, tt/1000, tg*1000/tt}' "$EXP_LOG")
+	  st=$(tr -d '\r' < "$EXP_LOG" | awk '/######## page cache/ {split("", v)}
+	    / faults, .* found resident/ {v[1]=$1; v[2]=$3; v[3]=$6} / buffers evicted/ {v[4]=$1}
+	    END {for (i = 1; i <= 4; i++) printf "%s%s", (i > 1 ? "," : ""), (i in v ? v[i] : "")}')
+	  [ -n "$r" ] || { status=failed; r=",,,,,"; exp_warn "ngl $2 at $3%: no result in $EXP_LOG"; }
+	  exp_row {{name}} "$TARGET" "$T_PLATFORM" "$model" "$2" "$3" "$budget" "$dev" "$4" "$rep" "$status" "$r" "$st"
+	}
+	model={{model}}
+	size=$(( $(tgt_sh "stat -c %s '$(exp_model $model)'") / 1048576 ))
+	for ngl in $(echo {{ngls}} | tr ',' ' '); do
+	  rep=0 budget=$(( size + 64 ))
+	  run uncapped "$ngl" none $(( size + 64 ))
+	  devngl=$dev
+	  for rep in $(exp_reps); do
+	    for pct in $(echo {{pcts}} | tr ',' ' '); do
+	      budget=$(( size * pct / 100 )) cache=$(( size * pct / 100 - devngl ))
+	      if [ "$cache" -lt 64 ]; then
+	        dev=$devngl
+	        exp_row {{name}} "$TARGET" "$T_PLATFORM" "$model" "$ngl" "$pct" "$budget" "$devngl" "$cache" "$rep" "over-budget" ",,,,," ",,,"
+	        continue
+	      fi
+	      run capped "$ngl" "$pct" "$cache"
+	    done
+	  done
+	done
+	exp_finish
+
 [doc('the paging results of the paper on one board, under the names the figures read')]
 paging-all target="joy":
 	#!/usr/bin/env bash

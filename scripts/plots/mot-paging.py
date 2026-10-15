@@ -30,7 +30,7 @@ def plot(out_path, arms, gbs):
     bound = lambda s: 1 / max(t_compute, model_bytes * (1 - s / 100) / (gbs * 1e9))
 
     values = {k: [data[k][0].get(s, np.nan) for s in shares] for k in series}
-    fig, ax = plt.subplots(figsize=(2.2, 1.6))
+    fig, ax = plt.subplots(figsize=(2.2, 1.4))
     x = grouped_bars(ax, [str(s) for s in shares], series, values, annotate=False,
                      width_total=0.8 if len(series) > 2 else 0.7)
     for i, s in enumerate(shares):
@@ -43,7 +43,7 @@ def plot(out_path, arms, gbs):
     ax.yaxis.set_minor_formatter(ticker.NullFormatter())
     low = np.nanmin([v for k in series for v in values[k]])
     ax.set_ylim(0.3 if low > 0.4 else 0.1, np.nanmax([v for k in series for v in values[k]]) * 4)
-    ax.set_xlabel('Weights in memory (%)')
+    ax.set_xlabel(r'Weights in memory (\%)' if USETEX else 'Weights in memory (%)')
     ax.set_ylabel('Decode (tokens/s)')
     better_hint(ax, higher=True)
     # llama.cpp as shipped and LROS are in the legend above the figure.
@@ -52,7 +52,7 @@ def plot(out_path, arms, gbs):
                                  label='I/O bound (computed)'))
     ax.legend(handles=handles, fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper right',
               handlelength=1.6, labelspacing=0.2)
-    panel_caption(ax, '(a) Weight paging', y=-0.36)
+    panel_caption(ax, '(a) Weight paging', y=-0.41)
     for s in shares:
         row = '  '.join(f"{k} {data[k][0].get(s, float('nan')):6.2f}" for k in series)
         print(f"{s:3d}%  {row}  bound {bound(s):6.2f}")

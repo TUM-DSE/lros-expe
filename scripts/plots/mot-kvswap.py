@@ -24,7 +24,7 @@ def plot(csv, out_path):
     resident = med(d[d.arm != 'recompute-gpu'], 't_dec') / 1000
     ns = sorted(arms[0][1].index)
 
-    fig, ax = plt.subplots(figsize=(2.2, 1.6))
+    fig, ax = plt.subplots(figsize=(2.2, 1.4))
     values = {k: [s.get(n, np.nan) for n in ns] for k, s in arms}
     x = grouped_bars(ax, [format_big_numbers(n) for n in ns], [k for k, _ in arms], values,
                      annotate=False, width_total=0.8)
@@ -44,7 +44,7 @@ def plot(csv, out_path):
     ax.legend(handles=handles, fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper left',
               ncol=2, handlelength=1.6, columnspacing=0.8)
     ax.set_ylim(0.03, np.nanmax(values['kv-state']) * 5)
-    panel_caption(ax, '(b) KV cache eviction', y=-0.36)
+    panel_caption(ax, '(b) KV cache eviction', y=-0.41)
     for k, s in arms:
         print(f"{style_for(k)['label']:24s} " + "  ".join(f"{n}:{v:.3f}" for n, v in s.items()))
     print(f"{'no eviction':24s} " + "  ".join(f"{n}:{v:.3f}" for n, v in resident.items()))

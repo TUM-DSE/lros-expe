@@ -5,7 +5,37 @@ VMs/
 .lesshst
 .direnv
 scripts/__pycache__
-results
+# Raw runs stay local; the CSVs and run metadata behind the paper's figures are tracked.
+/results/**
+!/results/**/
+!/results/mot-paging-f16-default/*/mot-paging-f16-default.csv
+!/results/mot-paging-f16-default/*/meta.json
+!/results/mot-paging-f16-final/*/mot-paging-f16-final.csv
+!/results/mot-paging-f16-final/*/meta.json
+!/results/mot-paging-lros-f16-final/*/mot-paging-lros-f16-final.csv
+!/results/mot-paging-lros-f16-final/*/meta.json
+!/results/mot-kvswap/*/mot-kvswap.csv
+!/results/mot-kvswap/*/meta.json
+!/results/mot-preempt-cpu/*/mot-preempt-cpu.csv
+!/results/mot-preempt-cpu/*/meta.json
+!/results/mot-preempt-gpu/*/mot-preempt-gpu.csv
+!/results/mot-preempt-gpu/*/meta.json
+!/results/mot-preempt-npu/*/mot-preempt-npu.csv
+!/results/mot-preempt-npu/*/meta.json
+!/results/mot-paging-lros-gpu/*/mot-paging-lros-gpu.csv
+!/results/mot-paging-lros-gpu/*/meta.json
+!/results/mot-paging-lros-stream/*/mot-paging-lros-stream.csv
+!/results/mot-paging-lros-stream/*/meta.json
+!/results/sched-cpu/*/sched-cpu.csv
+!/results/sched-cpu/*/meta.json
+!/results/sched-cpu-lros/*/sched-cpu-lros.csv
+!/results/sched-cpu-lros/*/meta.json
+!/results/sched-cpu-host/*/sched-cpu-host.csv
+!/results/sched-cpu-host/*/meta.json
+!/results/sched-accel/*/sched-accel.csv
+!/results/sched-accel/*/meta.json
+!/results/sched-accel-host/*/sched-accel-host.csv
+!/results/sched-accel-host/*/meta.json
 
 # The KV swap area image and host state file that `just kvswap_sweep` writes.
 bench/kvswap/

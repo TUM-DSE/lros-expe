@@ -155,7 +155,7 @@ style_map = {
     'cpu':        {'color': CPU_COLOR,    'hatch': CPU_HATCH,    'label': 'CPU-only', 'marker': 'x'},
     'lros-cpu':   {'color': CPU_COLOR,    'hatch': CPU_HATCH,    'label': 'LROS (CPU)', 'marker': 'x'},
     'viai':       {'color': LROS_COLOR,   'hatch': LROS_HATCH,   'label': 'LROS (VIAI)', 'marker': 'D'},
-    'native':     {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Native host', 'marker': '^'},
+    'native':     {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'llama.cpp (CUDA/RKNN)', 'marker': '^'},
     # model loading / weight paging
     'mmap':       {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': r'llama.cpp (mmap)', 'marker': 'o'},
     'read':       {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': r'llama.cpp (read)', 'marker': 's'},
@@ -194,7 +194,7 @@ style_map = {
     # motivation: KV cache eviction
     'kv-state':   {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'llama.cpp (state file)', 'marker': 'o'},
     'kv-all':     {'color': LROS_COLOR,  'hatch': LROS_HATCH,  'label': 'LROS, all evicted', 'marker': 'D'},
-    'kv-part':    {'color': lighten(LROS_COLOR), 'hatch': '..', 'label': 'LROS, 10% evicted', 'marker': 'D'},
+    'kv-part':    {'color': lighten(LROS_COLOR), 'hatch': '..', 'label': r'LROS, 10\% evicted' if USETEX else 'LROS, 10% evicted', 'marker': 'D'},
     # motivation: an arrival into a running batch
     'alone':      {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'Alone', 'marker': '^'},
     'gate':       {'color': LROS_COLOR,   'hatch': LROS_HATCH,   'label': 'Engine + held-out batch', 'marker': 'D'},

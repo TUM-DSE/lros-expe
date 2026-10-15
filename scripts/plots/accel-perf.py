@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""TTFT and decode of the guest on its CPU, the guest through VIAI and the native
-host library, per platform; VIAI labelled with the share of native it keeps.
+"""TTFT and decode of the guest through VIAI and of the native host library, per
+platform; VIAI labelled with the share of native it keeps.
 
     python3 accel-perf.py <out.pdf> <accel-perf.csv> [<accel-perf.csv> ...]
 """
@@ -9,92 +9,72 @@ import sys
 from common import *
 
 # (csv arm, style key)
-ARMS = [('guest-cpu', 'lros-cpu'), ('guest-viai', 'viai'), ('host-native', 'native')]
-PLATFORMS = [('orin', 'Jetson Orin'), ('rk3588', 'RK3588')]
+ARMS = [('guest-viai', 'viai'), ('host-native', 'native')]
+PLATFORMS = [('orin', 'Orin'), ('rk3588', 'RK3588')]
 # Where the accelerator never ran, so the arms measure something else. The RKNN
-# adapter takes F16 weights only, so it refuses every matmul of a Q4_1 model and
-# the guest falls back to its own CPU: the bars would compare two CPUs.
-NO_ACCELERATOR = {('rk3588', 'gemma-3-1b-it-Q4_1.gguf')}
+# adapter takes F16 weights only, so it refuses every matmul of a quantized
+# model and the guest falls back to its own CPU.
+NO_ACCELERATOR = {('rk3588', 'gemma-3-1b-it-Q4_1.gguf'),
+                  ('rk3588', 'olmoe-1b-7b-0924-instruct-q4_k_m.gguf')}
 MODELS = [('Llama-3.2-1B-Instruct-f16.gguf', 'Llama'),
-          ('gemma-3-1b-it-Q4_1.gguf', 'Gemma')]
+          ('olmoe-1b-7b-0924-instruct-q4_k_m.gguf', 'OLMoE')]
 
 
-def stats(df, platform, metric):
-    """mean and std per (arm, model), in the order the bars are drawn"""
-    d = df[df.platform == platform]
-    models = [(f, n) for f, n in MODELS
-              if (d.model == f).any() and (platform, f) not in NO_ACCELERATOR]
+def stats(df, metric):
+    """the bar groups (one per platform and model) and the mean and std of each
+    arm in them, in the order the bars are drawn"""
+    groups = [(p, f, f"{pn}\n{mn}") for p, pn in PLATFORMS for f, mn in MODELS
+              if ((df.platform == p) & (df.model == f)).any() and (p, f) not in NO_ACCELERATOR]
     mean, err = {}, {}
     for arm, key in ARMS:
-        a = d[d.arm == arm]
-        g = a.groupby('model')[metric].agg(['mean', 'std'])
-        mean[key] = [g.loc[f, 'mean'] if f in g.index else np.nan for f, _ in models]
-        err[key] = [0 if f not in g.index or np.isnan(g.loc[f, 'std']) else g.loc[f, 'std']
-                    for f, _ in models]
-    return models, mean, err
+        mean[key], err[key] = [], []
+        for p, f, _ in groups:
+            v = df[(df.platform == p) & (df.model == f) & (df.arm == arm)][metric]
+            mean[key].append(v.mean() if len(v) else np.nan)
+            err[key].append(v.std() if len(v) > 1 else 0)
+    return groups, mean, err
 
 
-def panel(ax, df, platform, metric, ylabel, higher, clip=False):
-    models, mean, err = stats(df, platform, metric)
+def panel(ax, df, metric, ylabel, higher, log=False):
+    groups, mean, err = stats(df, metric)
     keys = [k for _, k in ARMS]
-    x = grouped_bars(ax, [n for _, n in models], keys, mean, errors=err, annotate=False)
+    x = grouped_bars(ax, [g[2] for g in groups], keys, mean, errors=err, annotate=False)
     width = 0.8 / len(keys)
     top = np.nanmax([v + e for k in keys for v, e in zip(mean[k], err[k])])
-    # With a clipped axis the tallest bar is off the top, so labels are spaced
-    # against what the reader can actually see.
-    limit = np.nanmax([v + e for k in ('viai', 'native')
-                       for v, e in zip(mean[k], err[k])]) * 1.45 if clip else None
-    top = limit if clip else top
     vi, na = mean['viai'], mean['native']
-    for i in range(len(models)):
+    for i, (p, _, name) in enumerate(groups):
         if np.isnan(vi[i]) or np.isnan(na[i]):
             continue
         share = vi[i] / na[i] if higher else na[i] / vi[i]
         off = (keys.index('viai') - len(keys) / 2 + 0.5) * width
         label = f"{share * 100:.0f}\\%" if USETEX else f"{share * 100:.0f}%"
-        ax.text(x[i] + off, vi[i] + err['viai'][i] + top * 0.03, label,
-                ha='center', va='bottom', fontsize=FONTSIZE_ANNOTATION)
-        print(f"{platform:7s} {models[i][1]:13s} {metric:5s} "
+        y = (vi[i] + err['viai'][i]) * 1.15 if log else vi[i] + err['viai'][i] + top * 0.03
+        ax.text(x[i] + off, y, label, ha='center', va='bottom', fontsize=FONTSIZE_ANNOTATION)
+        print(f"{name.replace(chr(10), ' '):22s} {metric:5s} "
               + "  ".join(f"{k}={mean[k][i]:.3f}" for k in keys)
               + f"  viai/native={share * 100:.1f}%")
     ax.set_ylabel(ylabel, fontsize=FONTSIZE_AXIS_LABEL)
-    if clip:
-        # The CPU bar is up to twenty times the accelerated one, which would
-        # leave the two bars this panel is about a pixel high. The axis is cut
-        # to the accelerated bars and the CPU bar runs off the top, carrying
-        # its value instead.
-        ax.set_ylim(0, limit)
-        off = (keys.index('lros-cpu') - len(keys) / 2 + 0.5) * width
-        for i in range(len(models)):
-            v = mean['lros-cpu'][i]
-            if np.isnan(v) or v <= limit:
-                continue
-            # Inside the top of the bar it belongs to: above the axes is where
-            # the direction hint now lives.
-            ax.text(x[i] + off, limit * 0.97, f"{v:.1f} s", ha='center', va='top',
-                    fontsize=FONTSIZE_ANNOTATION,
-                    bbox=dict(boxstyle='square,pad=0.15', facecolor='white',
-                              edgecolor='none', alpha=0.9))
+    if log:
+        # TTFT spans a factor of twenty between the GPU and the NPU.
+        ax.set_yscale('log')
+        bottom = 10 ** np.floor(np.log10(np.nanmin([v for k in keys for v in mean[k]])))
+        ax.set_ylim(bottom, top * 4)
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:g}"))
     else:
-        ax.set_ylim(0, top * 1.25)
+        ax.set_ylim(0, top * 1.3)
+    ax.tick_params(axis='x', labelsize=FONTSIZE_TICK_LABEL)
     better_hint(ax, higher=higher)
 
 
 def plot(out, csvs):
     df = pd.concat([pd.read_csv(c) for c in csvs], ignore_index=True)
     df = df[df['pass'] == df['pass'].max()]
-    platforms = [(p, n) for p, n in PLATFORMS if (df.platform == p).any()]
 
-    n = 2 * len(platforms)
-    fig, axes = plt.subplots(1, n, figsize=(figwidth_full * n / 4, fig_height * 0.95))
-    axes = np.atleast_1d(axes)
-    letters = 'abcdefgh'
-    for j, (p, name) in enumerate(platforms):
-        a, b = axes[2 * j], axes[2 * j + 1]
-        panel(a, df, p, 't_pp', 'TTFT (s)', higher=False, clip=True)
-        panel(b, df, p, 's_tg', 'Decode thrghpt (tok/s)', higher=True)
-        panel_caption(a, f"({letters[2 * j]}) {name}: TTFT", y=-0.18)
-        panel_caption(b, f"({letters[2 * j + 1]}) {name}: decode thrghpt", y=-0.18)
+    fig, (a, b) = plt.subplots(1, 2, figsize=(figwidth_half, 1.5))
+    panel(a, df, 't_pp', 'TTFT (s)', higher=False, log=True)
+    panel(b, df, 's_tg', 'Decode (tok/s)', higher=True)
+    panel_caption(a, "(a) TTFT", y=-0.42)
+    panel_caption(b, "(b) Decode throughput", y=-0.42)
 
     keys = [k for _, k in ARMS]
     fig.legend(*legend_handles(keys), loc='lower center', bbox_to_anchor=(0.5, 1.0),

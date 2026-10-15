@@ -30,7 +30,7 @@ def plot(out_path, groups):
         a = d[d.arm == 'alone'].ttft_s
         alone.append(a.median() if len(a) else np.nan)
 
-    fig, ax = plt.subplots(figsize=(2.2, 1.6))
+    fig, ax = plt.subplots(figsize=(2.2, 1.4))
     x = grouped_bars(ax, labels, [k for _, k in ARMS], values, annotate=False, width_total=0.7,
                      errors={k: np.array(v) for k, v in errors.items()})
     for i in range(len(labels)):
@@ -48,7 +48,7 @@ def plot(out_path, groups):
     handles = [mlines.Line2D([], [], color='black', linestyle='--', linewidth=0.8, label='alone')]
     ax.legend(handles=handles, fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper left',
               handlelength=1.6)
-    panel_caption(ax, '(c) Preemption of a prefill', y=-0.22)
+    panel_caption(ax, '(c) Preemption of a prefill', y=-0.25)
     for i, lab in enumerate(labels):
         a, b = values['llamacpp'][i], values['lros'][i]
         print(f"{lab:4s} llama.cpp {a:6.2f} s  lros {b:6.2f} s  x{a / b:.1f}  alone {alone[i]:6.2f} s")

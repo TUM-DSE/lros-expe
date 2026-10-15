@@ -1,0 +1,15 @@
+{
+  "experiment": "mot-paging-lros-stream",
+  "target": "joy",
+  "platform": "orin",
+  "date": "2026-10-14T17:21:29+00:00",
+  "cores": "0-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 8,
+  "reps": 1,
+  "guest_rev": "7892dfeff",
+  "guest_dirty": true,
+  "host_rev": "c572d9d",
+  "swap": "",
+  "orchestrator": "irene"
+}

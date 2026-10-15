@@ -1,0 +1,15 @@
+{
+  "experiment": "sched-cpu-lros",
+  "target": "joy",
+  "platform": "orin",
+  "date": "2026-09-22T07:19:33+00:00",
+  "cores": "0-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 8,
+  "reps": 3,
+  "guest_rev": "40077a00f",
+  "guest_dirty": true,
+  "host_rev": "1fabc78",
+  "swap": "/scratch/swapfile file 16G;",
+  "orchestrator": "irene"
+}

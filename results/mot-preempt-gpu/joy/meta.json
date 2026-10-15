@@ -1,0 +1,15 @@
+{
+  "experiment": "mot-preempt-gpu",
+  "target": "joy",
+  "platform": "orin",
+  "date": "2026-10-08T10:02:30+00:00",
+  "cores": "0-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 8,
+  "reps": 3,
+  "guest_rev": "6d30fcd46",
+  "guest_dirty": true,
+  "host_rev": "07ea74e",
+  "swap": "/scratch/swapfile file 16G;",
+  "orchestrator": "irene"
+}

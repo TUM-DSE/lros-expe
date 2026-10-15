@@ -1,0 +1,15 @@
+{
+  "experiment": "mot-paging-lros-gpu",
+  "target": "joy",
+  "platform": "orin",
+  "date": "2026-10-14T16:49:39+00:00",
+  "cores": "0-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 8,
+  "reps": 1,
+  "guest_rev": "7892dfeff",
+  "guest_dirty": false,
+  "host_rev": "c572d9d",
+  "swap": "",
+  "orchestrator": "irene"
+}

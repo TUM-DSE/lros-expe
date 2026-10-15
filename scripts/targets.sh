@@ -87,7 +87,7 @@ export AAVMF_CODE=$SCRATCH/qemu-vaccel/share/qemu/edk2-aarch64-code.fd
 declare -A TGT_MODELS=(
     [local]="Llama-3.2-1B-Instruct-f16.gguf"
     [orangepi]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf"
-    [joy]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf"
+    [joy]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf olmoe-1b-7b-0924-instruct-q4_k_m.gguf"
 )
 
 # Where the native host baselines are built from this tree's llama.cpp-rknn:

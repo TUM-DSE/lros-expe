@@ -1,0 +1,15 @@
+{
+  "experiment": "mot-paging-f16-final",
+  "target": "orangepi",
+  "platform": "rk3588",
+  "date": "2026-10-09T09:50:02+00:00",
+  "cores": "4-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 4,
+  "reps": 3,
+  "guest_rev": "6d30fcd46",
+  "guest_dirty": true,
+  "host_rev": "07ea74e",
+  "swap": "/dev/zram0 partition 7.8G;",
+  "orchestrator": "irene"
+}

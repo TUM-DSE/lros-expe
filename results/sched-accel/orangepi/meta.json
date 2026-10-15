@@ -1,0 +1,15 @@
+{
+  "experiment": "sched-accel",
+  "target": "orangepi",
+  "platform": "rk3588",
+  "date": "2026-09-22T07:05:06+00:00",
+  "cores": "4-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 4,
+  "reps": 3,
+  "guest_rev": "40077a00f",
+  "guest_dirty": true,
+  "host_rev": "1fabc78",
+  "swap": "",
+  "orchestrator": "irene"
+}

@@ -1,0 +1,15 @@
+{
+  "experiment": "mot-paging-f16-default",
+  "target": "joy",
+  "platform": "orin",
+  "date": "2026-10-09T10:23:26+00:00",
+  "cores": "0-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 8,
+  "reps": 3,
+  "guest_rev": "6d30fcd46",
+  "guest_dirty": true,
+  "host_rev": "07ea74e",
+  "swap": "",
+  "orchestrator": "irene"
+}

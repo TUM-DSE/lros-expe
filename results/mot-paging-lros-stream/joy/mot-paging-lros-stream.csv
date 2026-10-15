@@ -1,0 +1,5 @@
+exp,target,platform,model,ngl,quota_pct,budget_mb,dev_mb,cache_mb,rep,status,pp,tg,t_pp,s_pp,t_tg,s_tg,faults,hits,read_mb,evicted
+mot-paging-lros-stream,joy,orin,Llama-3.2-1B-Instruct-f16.gguf,0,none,2428,0,2428,0,ok,103,63,1.961,52.53,106.273,0.59,0,0,0,0
+mot-paging-lros-stream,joy,orin,Llama-3.2-1B-Instruct-f16.gguf,0,75,1773,0,1773,1,ok,103,63,2.660,38.72,128.857,0.49,3206,1025,65382,4970
+mot-paging-lros-stream,joy,orin,Llama-3.2-1B-Instruct-f16.gguf,0,25,591,0,591,1,ok,103,63,3.054,33.73,158.382,0.40,9387,3035,122302,14679
+mot-paging-lros-stream,joy,orin,Llama-3.2-1B-Instruct-f16.gguf,0,10,236,0,236,1,ok,103,63,2.994,34.41,173.528,0.36,18585,4386,139045,25767
