@@ -291,6 +291,9 @@ extern "C" bool viai_rknn_node(ggml_tensor *node) {
     const int K = (int) w->ne[0];
     const int N = (int) w->ne[1];
     const int M = (int) a->ne[1];
+    if (M == 0) {
+        return true;   // no rows, an empty result
+    }
 
     const bool q8 = w->type == GGML_TYPE_Q8_0;
     const size_t esize = q8 ? sizeof(int8_t) : sizeof(uint16_t);

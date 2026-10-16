@@ -9,7 +9,7 @@ import sys
 from common import *
 
 # (csv arm, style key)
-ARMS = [('guest-viai', 'viai'), ('host-native', 'native')]
+ARMS = [('host-native', 'native'), ('guest-viai', 'viai')]
 PLATFORMS = [('orin', 'GPU'), ('rk3588', 'NPU')]
 MODELS = [('Llama-3.2-1B-Instruct-f16.gguf', 'Llama'),
           ('olmoe-1b-7b-0924-instruct-q8_0.gguf', 'OLMoE')]
