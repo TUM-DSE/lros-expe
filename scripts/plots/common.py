@@ -84,6 +84,10 @@ else:
 
 # --- text, valid in both pipelines ------------------------------------------
 
+# A percent sign; to LaTeX a bare % starts a comment and cuts the text off.
+PCT = r"\%" if USETEX else "%"
+
+
 def bf(text: str) -> str:
     """Bold `text`; under usetex the markup has to be explicit."""
     return r"\textbf{%s}" % text if USETEX else text

@@ -366,7 +366,7 @@ def background_scatter(df, mem, out_dir, arm_order, deadline_s):
             y = r.e2e_s.to_numpy() / deadline_s[app] * 100
             ax.scatter(x0 + i + rng.uniform(-0.3, 0.3, len(y)), y, s=5, color=ARM_COLOR[arm],
                        alpha=0.8, linewidths=0, zorder=3)
-            ax.annotate(f"{(r.deadline == 'met').mean() * 100:.0f}%", (x0 + i, 1.0),
+            ax.annotate(f"{(r.deadline == 'met').mean() * 100:.0f}{PCT}", (x0 + i, 1.0),
                         xycoords=('data', 'axes fraction'), xytext=(0, 1), textcoords='offset points',
                         ha='center', va='bottom', fontsize=FONTSIZE_ANNOTATION)
     ax.axhline(100, color='black', linewidth=0.7, linestyle='--', zorder=2)
@@ -378,7 +378,7 @@ def background_scatter(df, mem, out_dir, arm_order, deadline_s):
     ax.set_xticklabels([f"{APP_LABEL_PAPER[a]} ({deadline_s[a]:.0f} s)" for a in ['summarise', 'reply']],
                        fontsize=FONTSIZE_TICK_LABEL)
     ax.tick_params(axis='x', length=0)
-    ax.set_ylabel('Latency (% of deadline)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
+    ax.set_ylabel(f'Latency ({PCT} of deadline)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
     ax.grid(axis='y', linewidth=0.3, alpha=0.5)
     thin_spines(ax)
     fig.tight_layout(pad=0.2, rect=(0, 0, 1, 0.94))
@@ -538,8 +538,8 @@ def qos(stats, mem, out_dir, tpot_target):
         ('chat_tpot',   'Chat TPOT (ms)',           False),
         ('chat_buffer', 'Chat display buffer (ms)', False),
         ('chat_ttft',   'Chat TTFT (ms)',           False),
-        ('summ_met',    'Summarize on time (%)',  True),
-        ('reply_met',   'Reply on time (%)',        True),
+        ('summ_met',    f'Summarize on time ({PCT})', True),
+        ('reply_met',   f'Reply on time ({PCT})',     True),
     ]
     if s.chat_buffer.isna().all():
         panels = [p for p in panels if p[0] != 'chat_buffer']

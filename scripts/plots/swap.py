@@ -65,7 +65,7 @@ DISK_ORDER = ["nvme", "emmc"]
 METRIC_LABEL = {"s_tg": "Decode throughput (tok/s)",
                 "s_pp": "Prefill throughput (tok/s)",
                 "s": "Throughput (tok/s)"}
-QUOTA_LABEL = "Memory quota (% of model size)"
+QUOTA_LABEL = f"Memory quota ({PCT} of model size)"
 # Panel titles of the pair figure, by model file name without .gguf.
 MODEL_LABEL = {
     "Llama-3.2-1B-Instruct-f16": "Llama 3.2 1B (f16)",
@@ -219,7 +219,7 @@ def draw_panel(ax, sub, configs, metric, budgets, ylim, title, short_cut_label=F
                     ha="center", va="bottom", fontsize=FONTSIZE_ANNOTATION, zorder=4)
 
     ax.set_xticks(x)
-    ax.set_xticklabels([f"{b * 100:g}%" for b in budgets], fontsize=FONTSIZE_TICK_LABEL)
+    ax.set_xticklabels([f"{b * 100:g}{PCT}" for b in budgets], fontsize=FONTSIZE_TICK_LABEL)
     ax.set_xlim(-0.6, len(budgets) - 0.4)
     ax.set_ylim(0, ylim)
     ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:g}"))

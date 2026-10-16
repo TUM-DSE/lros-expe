@@ -343,7 +343,7 @@ def draw_partial(df, disks, axes, configs, compact=False, split=True):
             ax.text(0.02, 0.97, text, transform=ax.transAxes, ha="left", va="top",
                     fontsize=FONTSIZE_ANNOTATION, color="0.35")
         ax.set_xticks(x)
-        ax.set_xticklabels(["%d%%" % k for k in keeps], fontsize=FONTSIZE_TICK_LABEL)
+        ax.set_xticklabels(["%d%s" % (k, PCT) for k in keeps], fontsize=FONTSIZE_TICK_LABEL)
         ax.grid(True, axis="y", linewidth=0.3, alpha=0.5, zorder=0)
         style_axes(ax, disk, "KV kept resident", compact=compact)
         # Room above the tallest bar for the recompute note, three lines of
