@@ -313,12 +313,15 @@ def chat_scatter(df, tokens, mem, out_dir, tpot_target, arm_order):
 
 def load_deadlines(csvs, given):
     """Each background app's deadline (s): from the `@app` lines of the
-    trace beside each orch.csv (stage/traces/orch.trace), overridden by
-    `given` ("app=s,..."); a combined CSV has no trace beside it."""
+    trace beside each orch.csv (orch.trace in a results/ directory,
+    stage/traces/orch.trace in a sweep's), overridden by `given`
+    ("app=s,..."), for a CSV with no trace beside it."""
     out = {}
     for c in csvs:
-        path = os.path.join(os.path.dirname(os.path.abspath(c)), 'stage/traces/orch.trace')
-        if not os.path.exists(path):
+        here = os.path.dirname(os.path.abspath(c))
+        path = next((p for p in (os.path.join(here, 'orch.trace'),
+                                 os.path.join(here, 'stage/traces/orch.trace')) if os.path.exists(p)), None)
+        if path is None:
             continue
         for line in open(path):
             f = line.split()

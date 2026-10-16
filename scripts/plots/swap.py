@@ -126,13 +126,11 @@ def parse_args():
 
 
 def load(paths, metric, ntg):
-    frames = []
-    for p in paths:
-        f = pd.read_csv(p)
-        # batched-bench writes an ntg=1 row for every run, llama-cli never.
-        f["frontend"] = "batched-bench" if (f["tg"] == 1).any() else "cli"
-        frames.append(f)
-    df = pd.concat(frames, ignore_index=True)
+    df = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
+    # batched-bench writes an ntg=1 row for every run, llama-cli never; per
+    # sweep (its timestamp), as one CSV may hold several sweeps.
+    bench_sweeps = set(df.loc[df["tg"] == 1, "timestamp"])
+    df["frontend"] = np.where(df["timestamp"].isin(bench_sweeps), "batched-bench", "cli")
     df = df[df["status"] == "ok"].dropna(subset=[metric])
     bench = df["frontend"] == "batched-bench"
     if bench.any() and ntg not in set(df.loc[bench, "tg"]):
