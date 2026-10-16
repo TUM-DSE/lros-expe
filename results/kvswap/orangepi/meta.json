@@ -1,0 +1,22 @@
+{
+  "experiment": "kvswap",
+  "target": "orangepi",
+  "platform": "rk3588",
+  "date": "2026-10-15T01:03:19+00:00",
+  "cores": "4-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 4,
+  "reps": 2,
+  "guest_rev": "7892dfef",
+  "guest_dirty": null,
+  "host_rev": "0a0a12a",
+  "swap": "/dev/zram0 partition 7.8G;",
+  "orchestrator": "orangepi5ultra",
+  "sweeps": [
+    "2026-10-14T18:43:09+00:00",
+    "2026-10-14T19:16:26+00:00",
+    "2026-10-15T00:30:11+00:00",
+    "2026-10-15T01:03:19+00:00"
+  ],
+  "notes": "KV cache swap vs. recompute, area 1G, drives io_uring with MDTS 9. NVMe (2026-10-14) and eMMC (2026-10-15): lengths 64-2048 for linux-file, lros-64K, lros-4K-lazy, and the partial-keep sweep at 1024 tokens."
+}
