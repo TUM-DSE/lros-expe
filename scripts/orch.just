@@ -337,4 +337,5 @@ plot_orch csv="" out_dir="" args="":
 	for c in {{csv}}; do csvs+=("$(cd "{{invocation_directory()}}" && realpath "$c")"); done
 	out=(); [ -n "{{out_dir}}" ] && out=(-o "$(cd "{{invocation_directory()}}" && realpath -m "{{out_dir}}")")
 	cd {{source_directory()}}/plots
+	export PLOT_USETEX=1   # the paper's figures are typeset by LaTeX
 	python3 orch.py "${csvs[@]}" "${out[@]}" {{args}}

@@ -55,7 +55,7 @@ BIG_PAGE_COLOR = darken(LROS_COLOR)
 # grey, LROS blue, the lazy restore a lighter LROS shade and the bigger page a
 # darker one, so the bars tell them apart; the lines also differ by marker.
 CONFIG_STYLE = {
-    "linux-file":   {"label": "Userspace (state file)", "color": LINUX_COLOR, "marker": "s"},
+    "linux-file":   {"label": "llama.cpp (state file)", "color": LINUX_COLOR, "hatch": LINUX_HATCH, "marker": "s"},
     "lros-4K":      {"label": "LROS (paged, 4K)", "color": LROS_COLOR, "marker": "o"},
     "lros-64K":     {"label": "LROS (paged, 64K)", "color": BIG_PAGE_COLOR, "marker": "^"},
     "lros-2M":      {"label": "LROS (paged, 2M)", "color": darken(BIG_PAGE_COLOR), "marker": "D"},
@@ -174,7 +174,7 @@ def stacked_bars(ax, x, off, width, out, inn, st, label, split=True):
     `split`, the swap out below and the swap in hatched on top; one solid
     bar of the total otherwise."""
     if not split:
-        ax.bar(x + off, out + inn, width=width, color=st["color"],
+        ax.bar(x + off, out + inn, width=width, color=st["color"], hatch=st.get("hatch", ""),
                edgecolor="black", linewidth=0.4, label=label, zorder=3)
         return
     ax.bar(x + off, out, width=width, color=st["color"],

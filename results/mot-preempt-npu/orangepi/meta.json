@@ -2,14 +2,14 @@
   "experiment": "mot-preempt-npu",
   "target": "orangepi",
   "platform": "rk3588",
-  "date": "2026-10-08T07:22:17+00:00",
+  "date": "2026-10-16T09:36:27+00:00",
   "cores": "4-7",
   "guest_mem": "8G",
   "guest_vcpus": 4,
   "reps": 3,
-  "guest_rev": "6d30fcd46",
+  "guest_rev": "7892dfeff",
   "guest_dirty": true,
-  "host_rev": "07ea74e",
+  "host_rev": "c572d9d",
   "swap": "/dev/zram0 partition 7.8G;",
   "orchestrator": "irene"
 }

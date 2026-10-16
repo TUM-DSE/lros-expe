@@ -254,8 +254,9 @@ ggml_tensor * viai_server::deserialize_tensor(struct ggml_context * ctx, const v
     }
 
     if (result->buffer) {
-        // require that the tensor data does not go beyond the buffer end
-        uint64_t tensor_size = (uint64_t) ggml_nbytes(result);
+        // require that the tensor data does not go beyond the buffer end;
+        // ggml_nbytes wraps for a tensor with an empty dimension
+        uint64_t tensor_size = ggml_nelements(result) == 0 ? 0 : (uint64_t) ggml_nbytes(result);
         uint64_t buffer_start = (uint64_t) ggml_backend_buffer_get_base(result->buffer);
         uint64_t buffer_size = (uint64_t) ggml_backend_buffer_get_size(result->buffer);
         GGML_ASSERT(tensor->data + tensor_size >= tensor->data); // check for overflow

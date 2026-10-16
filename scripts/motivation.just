@@ -222,6 +222,7 @@ plot out=PAPER:
 	set -euo pipefail
 	R={{RESULTS}}
 	cd {{HERE}}/plots
+	export PLOT_USETEX=1   # the paper's figures are typeset by LaTeX
 	python3 mot-legend.py {{out}}/mot-legend.pdf
 	python3 mot-paging.py {{out}}/mot-paging.pdf \
 	  --default $R/mot-paging-f16-default/joy/mot-paging-f16-default.csv \

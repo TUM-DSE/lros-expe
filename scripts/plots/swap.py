@@ -24,10 +24,10 @@ import sys
 from common import *
 
 # The sweep's config names, mapped onto the paper's series identities. The
-# per-tensor arms are the full LROS colour, the layer prefetch hatched the
-# other way round from mmap, which stays readable in the small legend swatch; fixed
-# buffer sizes differ by hatch; the -nopin arms (--pin-percent 0, S3-FIFO over
-# the whole cache) take a lighter LROS shade.
+# headline arm, per tensor with layer prefetch, is plain LROS, solid like LROS
+# in every figure; per tensor alone is hatched against it; fixed buffer sizes
+# differ by hatch; the -nopin arms (--pin-percent 0, S3-FIFO over the whole
+# cache) take a lighter LROS shade.
 NOPIN_COLOR = lighten(LROS_COLOR, 0.45)
 # Configurations left out of the figures even when the data has them; older
 # sweeps carry arms the current one dropped. --configs overrides this.
@@ -36,8 +36,8 @@ CONFIG_STYLE = {
     "linux-mmap": ("mmap", {}),
     # The arm the speedup is printed for comes right after mmap, so that the
     # label sits between the two bars it compares.
-    "lros-tensor-layer": ("prefetch", {"label": "LROS (per tensor, layer prefetch)", "hatch": "\\\\"}),
-    "lros-tensor": ("prefetch", {"label": "LROS (per tensor)"}),
+    "lros-tensor-layer": ("prefetch", {"label": "LROS (per tensor, layer prefetch)"}),
+    "lros-tensor": ("prefetch", {"label": "LROS (per tensor)", "hatch": "\\\\"}),
     "lros-4K": ("prefetch", {"label": "LROS (prefetch, 4K)", "hatch": ".."}),
     "lros-128K": ("prefetch", {"label": "LROS (prefetch, 128K)", "hatch": ".."}),
     "lros-2M": ("prefetch", {"label": "LROS (prefetch, 2M)"}),

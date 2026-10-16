@@ -116,9 +116,11 @@ accel target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" fills="" chunk="64" ar
 	  cuda) ngl="-ngl 99" MARKER="found [1-9][0-9]* CUDA devices" ;;
 	  *)    ngl="" MARKER="using device RKNN" ;;
 	esac
+	# The NPU takes the matmuls the host rknnoh config offloads, ffn.* and no others.
+	case "$T_ACCEL" in rknnoh) placement="--env VIAI_POLICY={nodes:ffn.*} " ;; *) placement="" ;; esac
 	slots="-np $nt -c $(( 2048 * (2 * nt + 1) )) -t $nt --mode slots $ngl \
 	  -C $mask --cpu-strict 1 -Cb $mask --cpu-strict-batch 1"
-	lros="lros-serve -m nvme:2 -c 8192 -np 8 -t $nt --mode lros -ngl 99 --policy /root/policies/$(basename "$pol")"
+	lros="${placement}lros-serve -m nvme:2 -c 8192 -np 8 -t $nt --mode lros -ngl 99 --policy /root/policies/$(basename "$pol")"
 	for rep in $(exp_reps); do
 	  for fill in $(echo $fills | tr ',' ' '); do
 	    htrace="--trace $T_SCRATCH/stage/sched-accel-$TARGET/traces/$DEV-k$fill.trace"
@@ -141,7 +143,9 @@ plot out=PAPER:
 	set -euo pipefail
 	csvs() { for e in "$@"; do ls {{RESULTS}}/$e/*/$e.csv 2>/dev/null || true; done; }
 	cpu=$(csvs sched-cpu sched-cpu-lros sched-cpu-host)
-	accel=$(csvs sched-accel sched-accel-host)
+	accel=$(csvs sched-accel sched-accel-host sched-accel-lros)
 	[ -n "$cpu$accel" ] || { echo "no results yet; run just sched::cpu or sched::accel" >&2; exit 1; }
 	cd {{HERE}}/plots
-	python3 sched.py {{out}}/sched.pdf --cpu $cpu --accel $accel
+	export PLOT_USETEX=1   # the paper's figures are typeset by LaTeX
+	python3 sched.py {{out}}/sched.pdf --cpu $cpu --accel $accel --devices CPU,GPU
+	python3 sched.py {{out}}/sched-npu.pdf --cpu $cpu --accel $accel --devices NPU

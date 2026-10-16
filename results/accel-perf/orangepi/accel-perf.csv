@@ -1,0 +1,13 @@
+exp,target,platform,model,arm,rep,pass,pp,tg,t_pp,s_pp,t_tg,s_tg
+accel-perf,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,host-native,1,1,103,63,1.479,69.63,8.870,7.10
+accel-perf,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,guest-viai,1,1,103,63,1.620,63.57,10.532,5.98
+accel-perf,orangepi,rk3588,olmoe-1b-7b-0924-instruct-q8_0.gguf,host-native,1,1,106,63,2.994,35.41,4.310,14.62
+accel-perf,orangepi,rk3588,olmoe-1b-7b-0924-instruct-q8_0.gguf,guest-viai,1,1,106,63,52.615,2.01,21.380,2.95
+accel-perf,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,host-native,2,1,103,63,1.494,68.94,8.984,7.01
+accel-perf,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,guest-viai,2,1,103,63,1.519,67.83,10.398,6.06
+accel-perf,orangepi,rk3588,olmoe-1b-7b-0924-instruct-q8_0.gguf,host-native,2,1,106,63,2.982,35.55,4.275,14.74
+accel-perf,orangepi,rk3588,olmoe-1b-7b-0924-instruct-q8_0.gguf,guest-viai,2,1,106,63,52.461,2.02,21.257,2.96
+accel-perf,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,host-native,3,1,103,63,1.512,68.14,9.012,6.99
+accel-perf,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,guest-viai,3,1,103,63,1.597,64.51,10.217,6.17
+accel-perf,orangepi,rk3588,olmoe-1b-7b-0924-instruct-q8_0.gguf,host-native,3,1,106,63,2.990,35.45,4.169,15.11
+accel-perf,orangepi,rk3588,olmoe-1b-7b-0924-instruct-q8_0.gguf,guest-viai,3,1,106,63,53.088,2.00,21.349,2.95

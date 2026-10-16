@@ -1,4 +1,4 @@
-# Shared plotting style for the LROS paper: Libertine text, a colour and hatch
+# Shared plotting style for the LROS paper: Times text, a colour and hatch
 # per system, and a blue "lower/higher is better" hint. LaTeX renders the text
 # when a latex binary exists (force with PLOT_USETEX=1/0), mathtext otherwise.
 import argparse
@@ -49,7 +49,11 @@ mpl.use("Agg")
 def _want_usetex() -> bool:
     override = os.environ.get("PLOT_USETEX")
     if override is not None:
-        return override not in ("0", "", "no", "false")
+        want = override not in ("0", "", "no", "false")
+        if want and shutil.which("latex") is None:
+            sys.exit("PLOT_USETEX is set but there is no latex on PATH; plot from a shell "
+                     "with TeX Live, e.g. nix-shell -p texliveFull")
+        return want
     return shutil.which("latex") is not None
 
 
@@ -61,10 +65,11 @@ if USETEX:
     mpl.rcParams.update({
         "text.usetex": True,
         "font.family": "serif",
-        "font.serif": ["Libertine"],
+        "font.serif": ["Times"],
+        # The paper's own Times (ptm, from mlsys2026.sty's \usepackage{times}),
+        # for text and math.
         "text.latex.preamble": r"""
-\usepackage[tt=false, type1=true]{libertine}
-\usepackage[libertine]{newtxmath}
+\usepackage{mathptmx}
 \usepackage{amsmath}
 """,
     })
@@ -72,8 +77,8 @@ else:
     mpl.rcParams.update({
         "text.usetex": False,
         "font.family": "serif",
-        "font.serif": ["Linux Libertine O", "Libertine", "DejaVu Serif"],
-        "mathtext.fontset": "dejavuserif",
+        "font.serif": ["Nimbus Roman", "TeX Gyre Termes", "Times New Roman", "Liberation Serif", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
     })
 
 
@@ -154,8 +159,8 @@ style_map = {
     # accelerator integration
     'cpu':        {'color': CPU_COLOR,    'hatch': CPU_HATCH,    'label': 'CPU-only', 'marker': 'x'},
     'lros-cpu':   {'color': CPU_COLOR,    'hatch': CPU_HATCH,    'label': 'LROS (CPU)', 'marker': 'x'},
-    'viai':       {'color': LROS_COLOR,   'hatch': LROS_HATCH,   'label': 'LROS (VIAI)', 'marker': 'D'},
-    'native':     {'color': NATIVE_COLOR, 'hatch': NATIVE_HATCH, 'label': 'llama.cpp (CUDA/RKNN)', 'marker': '^'},
+    'viai':       {'color': LROS_COLOR,   'hatch': LROS_HATCH,   'label': 'LROS (VIA)', 'marker': 'D'},
+    'native':     {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': 'llama.cpp (CUDA/RKNN)', 'marker': '^'},
     # model loading / weight paging
     'mmap':       {'color': LINUX_COLOR, 'hatch': LINUX_HATCH, 'label': r'llama.cpp (mmap)', 'marker': 'o'},
     'read':       {'color': ALT_COLOR,   'hatch': ALT_HATCH,   'label': r'llama.cpp (read)', 'marker': 's'},

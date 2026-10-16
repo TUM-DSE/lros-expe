@@ -1,0 +1,15 @@
+{
+  "experiment": "accel-perf",
+  "target": "joy",
+  "platform": "orin",
+  "date": "2026-10-16T08:19:16+00:00",
+  "cores": "0-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 8,
+  "reps": 3,
+  "guest_rev": "7892dfeff",
+  "guest_dirty": true,
+  "host_rev": "c572d9d",
+  "swap": "",
+  "orchestrator": "irene"
+}

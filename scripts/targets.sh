@@ -86,8 +86,8 @@ export AAVMF_CODE=$SCRATCH/qemu-vaccel/share/qemu/edk2-aarch64-code.fd
 # Models each target holds, by file name.
 declare -A TGT_MODELS=(
     [local]="Llama-3.2-1B-Instruct-f16.gguf"
-    [orangepi]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf"
-    [joy]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf olmoe-1b-7b-0924-instruct-q4_k_m.gguf"
+    [orangepi]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf olmoe-1b-7b-0924-instruct-q8_0.gguf"
+    [joy]="Llama-3.2-1B-Instruct-f16.gguf gemma-3-1b-it-Q4_1.gguf olmoe-1b-7b-0924-instruct-q4_k_m.gguf olmoe-1b-7b-0924-instruct-q8_0.gguf"
 )
 
 # Where the native host baselines are built from this tree's llama.cpp-rknn:
@@ -126,7 +126,7 @@ NIX_CACHE="https://cache.dos.cit.tum.de"
 # CUDA must be 12.6 to match the JetPack driver.
 declare -A TGT_BUILD_ENV=(
     [local]=""
-    [orangepi]=""
+    [orangepi]="ulimit -n 65536"
     [joy]='export PATH=$(nix build --no-link --print-out-paths nixpkgs#cmake nixpkgs#gnumake nixpkgs#gcc | sed "s|\$|/bin|" | paste -sd:):$PATH
 export CUDAToolkit_ROOT=$(nix build --no-link --print-out-paths nixpkgs#cudaPackages_12_6.cudatoolkit)
 export PATH=$CUDAToolkit_ROOT/bin:$PATH
@@ -138,7 +138,7 @@ export CUDA_ARCH=87
 # What a native accelerator run needs to find the real driver, not the stub.
 declare -A TGT_HOST_ACCEL_ENV=(
     [local]=""
-    [orangepi]=""
+    [orangepi]="ulimit -n 65536"
     [joy]='export LD_LIBRARY_PATH=/run/opengl-driver/lib:/nix/store/ypbj1is9jy373kflw6gqa9cik5zrfp2y-libcublas-12.6.4.1-lib/lib:/nix/store/hihpfsyjh9h8c7sxp75n8qlqbs4w517n-cuda_cudart-12.6.77-lib/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}'
 )
 

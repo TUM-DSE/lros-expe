@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""TTFT and decode of the guest through VIAI and of the native host library, per
-platform; VIAI labelled with the share of native it keeps.
+"""TTFT and decode of the guest through VIA and of the native host library, per
+platform; VIA labelled with the share of native it keeps.
 
     python3 accel-perf.py <out.pdf> <accel-perf.csv> [<accel-perf.csv> ...]
 """
@@ -10,14 +10,12 @@ from common import *
 
 # (csv arm, style key)
 ARMS = [('guest-viai', 'viai'), ('host-native', 'native')]
-PLATFORMS = [('orin', 'Orin'), ('rk3588', 'RK3588')]
-# Where the accelerator never ran, so the arms measure something else. The RKNN
-# adapter takes F16 weights only, so it refuses every matmul of a quantized
-# model and the guest falls back to its own CPU.
-NO_ACCELERATOR = {('rk3588', 'gemma-3-1b-it-Q4_1.gguf'),
-                  ('rk3588', 'olmoe-1b-7b-0924-instruct-q4_k_m.gguf')}
+PLATFORMS = [('orin', 'GPU'), ('rk3588', 'NPU')]
 MODELS = [('Llama-3.2-1B-Instruct-f16.gguf', 'Llama'),
-          ('olmoe-1b-7b-0924-instruct-q4_k_m.gguf', 'OLMoE')]
+          ('olmoe-1b-7b-0924-instruct-q8_0.gguf', 'OLMoE')]
+# Where the accelerator never ran, so the arms would compare two CPUs: neither
+# NPU path runs OLMoE's expert multiplications or its F32 router.
+NO_ACCELERATOR = {('rk3588', 'olmoe-1b-7b-0924-instruct-q8_0.gguf')}
 
 
 def stats(df, metric):
@@ -71,7 +69,7 @@ def plot(out, csvs):
     df = df[df['pass'] == df['pass'].max()]
 
     fig, (a, b) = plt.subplots(1, 2, figsize=(figwidth_half, 1.5))
-    panel(a, df, 't_pp', 'TTFT (s)', higher=False, log=True)
+    panel(a, df, 't_pp', 'TTFT (s)', higher=False)
     panel(b, df, 's_tg', 'Decode (tok/s)', higher=True)
     panel_caption(a, "(a) TTFT", y=-0.42)
     panel_caption(b, "(b) Decode throughput", y=-0.42)
