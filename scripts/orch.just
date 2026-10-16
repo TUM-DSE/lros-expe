@@ -63,7 +63,8 @@
 # the same NVMe through the kernel, their page cache dropped before each run.
 #
 # Output: bench/out/orch/<timestamp>/orch.csv, one row per finished request
-# (scripts/parse.py apps), the trace and policies used, and the console logs
+# (scripts/parse.py apps), tokens.csv, one row per generated token, and
+# width.csv, the cores in use, the trace and policies used, and the console logs
 # under logs/<mem>/<arm>/run<n>. Figures: just plot_orch <csv>.
 #
 # With truncate=1 (the default, for quick numbers) the slot arms are stopped
@@ -222,6 +223,10 @@ orch_sweep n_runs="1" size_mem="10G" variant="paging" arms=ORCH_ARMS mems=ORCH_M
 	# utilization figure of the plots.
 	width_csv="$out_dir/width.csv"
 	echo "timestamp,run,mem,arm,$(python3 -c 'import sys; sys.path.insert(0, "{{proot}}/scripts"); import parse; print(parse.WIDTH_HEADER)')" > "$width_csv"
+	# Every generated token's time since its request's arrival (scripts/
+	# parse.py tokens), for the per-token TPOT figure.
+	tokens_csv="$out_dir/tokens.csv"
+	echo "timestamp,run,mem,arm,$(python3 -c 'import sys; sys.path.insert(0, "{{proot}}/scripts"); import parse; print(parse.TOKENS_HEADER)')" > "$tokens_csv"
 
 	# mem outside arm: a partial sweep then holds every arm of one memory
 	# setting, which is a complete comparison.
@@ -333,6 +338,7 @@ orch_sweep n_runs="1" size_mem="10G" variant="paging" arms=ORCH_ARMS mems=ORCH_M
 			[ -n "$row" ] && { echo "$ts,$run,$mem,$arm,$row,$status" >> "$csv"; n=$((n + 1)); }
 		done < <(python3 {{proot}}/scripts/parse.py apps "$out")
 		python3 {{proot}}/scripts/parse.py width "$out" | sed "s/^/$ts,$run,$mem,$arm,/" >> "$width_csv"
+		python3 {{proot}}/scripts/parse.py tokens "$out" | sed "s/^/$ts,$run,$mem,$arm,/" >> "$tokens_csv"
 		echo "  -> $status, $n of $expect requests"
 	done; done; done
 
