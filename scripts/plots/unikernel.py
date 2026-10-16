@@ -62,10 +62,12 @@ MEMORY = {
     "Memory footprint": np.array([mean.at[c, "rss_kib"] for c in CONFIGS]) / 1024,
 }
 
-# Colour and hatch per segment. The image's kernel and root filesystem take
-# the look of the boot's kernel and userspace phases they belong to.
-_SHADES = [(LROS_COLOR, ''), (lighten(LROS_COLOR, 0.30), '..'),
-           (lighten(LROS_COLOR, 0.55), 'xx'), (lighten(LROS_COLOR, 0.78), '//')]
+# Shade (how far lightened) and hatch per segment, over each system's colour:
+# Linux in greys, LROS in blues. The legend shows the grey shades, as they
+# stand for the segment in either. The image's kernel and root filesystem
+# take the look of the boot's kernel and userspace phases they belong to.
+SYSTEM_COLOR = [LINUX_COLOR, LROS_COLOR]  # in SYSTEMS order
+_SHADES = [(0.0, ''), (0.30, '..'), (0.55, 'xx'), (0.78, '//')]
 SEG_STYLE = dict(zip(BOOT, _SHADES))
 SEG_STYLE.update({"Kernel / unikernel": _SHADES[2], "Root filesystem": _SHADES[3],
                   "Memory footprint": _SHADES[0]})
@@ -90,10 +92,13 @@ def row(ax, segments, title, unit, fewer="less", legend=True, hint=False):
     under the x tick labels, centred, as the panel's caption."""
     y = np.arange(len(SYSTEMS), dtype=float)[::-1]
     left = np.zeros(len(SYSTEMS))
+    handles = []
     for name, vals in segments.items():
-        color, hatch = SEG_STYLE[name]
-        ax.barh(y, vals, left=left, height=0.62, color=color, hatch=hatch, label=name,
-                edgecolor='black', linewidth=0.4, zorder=3)
+        shade, hatch = SEG_STYLE[name]
+        ax.barh(y, vals, left=left, height=0.62, color=[lighten(c, shade) for c in SYSTEM_COLOR],
+                hatch=hatch, edgecolor='black', linewidth=0.4, zorder=3)
+        handles.append(mpatches.Patch(facecolor=lighten(LINUX_COLOR, shade), hatch=hatch,
+                                      edgecolor='black', linewidth=0.4, label=name))
         left = left + vals
     totals = left
 
@@ -117,7 +122,7 @@ def row(ax, segments, title, unit, fewer="less", legend=True, hint=False):
 
     # The legend sits right on the axes.
     if legend:
-        ax.legend(loc='lower left', bbox_to_anchor=(0, 1.0), ncol=len(segments),
+        ax.legend(handles=handles, loc='lower left', bbox_to_anchor=(0, 1.0), ncol=len(segments),
                   fontsize=FONTSIZE_LEGEND, frameon=False, borderaxespad=0.1, borderpad=0.1,
                   handlelength=1.3, handleheight=0.8, handletextpad=0.4, columnspacing=1.0)
     if hint:
