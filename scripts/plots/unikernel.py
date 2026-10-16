@@ -85,8 +85,9 @@ def amount(total, unit):
 def row(ax, segments, title, unit, fewer="less", legend=True, hint=False):
     """One measure as horizontal stacked bars, Linux VM above LROS. Each
     total is written after its bar, LROS's with the factor it saves. Above
-    the axes: the title, then (legend) the segments' legend in one line;
-    hint puts the better-direction note on the title's line, at the right."""
+    the axes: (legend) the segments' legend in one line; hint puts the
+    better-direction note inside the axes, bottom right. The title goes
+    under the x tick labels, centred, as the panel's caption."""
     y = np.arange(len(SYSTEMS), dtype=float)[::-1]
     left = np.zeros(len(SYSTEMS))
     for name, vals in segments.items():
@@ -114,17 +115,18 @@ def row(ax, segments, title, unit, fewer="less", legend=True, hint=False):
     thin_spines(ax)
     ax.tick_params(axis='y', length=0)
 
-    # The legend sits right on the axes, the title one legend line above it.
-    title_up = 2
+    # The legend sits right on the axes.
     if legend:
         ax.legend(loc='lower left', bbox_to_anchor=(0, 1.0), ncol=len(segments),
                   fontsize=FONTSIZE_LEGEND, frameon=False, borderaxespad=0.1, borderpad=0.1,
                   handlelength=1.3, handleheight=0.8, handletextpad=0.4, columnspacing=1.0)
-        title_up = 13
-    for text, x, ha, color, size in [(title, 0, 'left', 'black', FONTSIZE_AXIS_LABEL)] + \
-            ([(left_better_str, 1, 'right', 'blue', FONTSIZE_ANNOTATION)] if hint else []):
-        ax.annotate(text, xy=(x, 1), xycoords='axes fraction', xytext=(0, title_up),
-                    textcoords='offset points', ha=ha, va='bottom', color=color, fontsize=size)
+    if hint:
+        # Inside, bottom right: LROS's bar and its total end well short of it.
+        ax.annotate(left_better_str, xy=(1, 0), xycoords='axes fraction', xytext=(-2, 2),
+                    textcoords='offset points', ha='right', va='bottom', color='blue',
+                    fontsize=FONTSIZE_ANNOTATION)
+    ax.annotate(title, xy=(0.5, 0), xycoords='axes fraction', xytext=(0, -TICKS_H * 72),
+                textcoords='offset points', ha='center', va='top', fontsize=FONTSIZE_AXIS_LABEL)
 
 
 PANELS = [  # segments, title, unit, fewer, legend
@@ -132,19 +134,19 @@ PANELS = [  # segments, title, unit, fewer, legend
     (MEMORY, "(b) Memory touched (MB)", "MB", "less", False),
     (IMAGE, "(c) Image size (GB)", "GB", "smaller", True),
 ]
-# Laid out by hand, in inches, so that the gap between one panel's x axis
-# and the next panel's title is the same whether or not a legend sits in
-# between (tight_layout spaces the axes evenly instead).
-AXES_H, TICKS_H, GAP_H, TITLE_H, LEGEND_H = 0.42, 0.18, 0.02, 0.16, 0.17
+# Laid out by hand, in inches, so that the gap between one panel's caption
+# and the next panel is the same whether or not a legend sits in between
+# (tight_layout spaces the axes evenly instead).
+AXES_H, TICKS_H, CAPTION_H, GAP_H, TOP_H, LEGEND_H = 0.42, 0.16, 0.14, 0.08, 0.04, 0.17
 LEFT_W, RIGHT_W = 0.62, 0.05
-height = sum(TITLE_H + LEGEND_H * legend + AXES_H + TICKS_H for *_, legend in PANELS) \
+height = sum(TOP_H + LEGEND_H * legend + AXES_H + TICKS_H + CAPTION_H for *_, legend in PANELS) \
     + GAP_H * (len(PANELS) - 1)
 fig = plt.figure(figsize=(figwidth_half, height))
 top = height
 for segments, title, unit, fewer, legend in PANELS:
-    top -= TITLE_H + LEGEND_H * legend
+    top -= TOP_H + LEGEND_H * legend
     ax = fig.add_axes([LEFT_W / figwidth_half, (top - AXES_H) / height,
                        (figwidth_half - LEFT_W - RIGHT_W) / figwidth_half, AXES_H / height])
     row(ax, segments, title, unit, fewer=fewer, legend=legend, hint=True)
-    top -= AXES_H + TICKS_H + GAP_H
+    top -= AXES_H + TICKS_H + CAPTION_H + GAP_H
 save(fig, "unikernel-micro.pdf", OUT_DIR, png=True)
