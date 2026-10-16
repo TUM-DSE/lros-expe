@@ -174,25 +174,27 @@ def ordered(values, order):
 
 
 def leg_patches():
-    """Legend entries for the two legs of a stacked bar: the lower, solid
-    part is the swap out, the hatched part on top the swap in."""
+    """Legend entries for the two legs of a stacked bar: the lower part in
+    the arm's colour is the swap out, the lighter part on top the swap in."""
     return ([mpatches.Patch(facecolor="0.5", edgecolor="black", linewidth=0.4),
-             mpatches.Patch(facecolor="0.85", edgecolor="black", linewidth=0.4, hatch="//")],
-            ["swap out (lower)", "swap in (upper, hatched)"])
+             mpatches.Patch(facecolor=lighten("0.5", 0.6), edgecolor="black", linewidth=0.4)],
+            ["swap out (lower)", "swap in (upper, lighter)"])
 
 
 def stacked_bars(ax, x, off, width, out, inn, st, label, split=True):
     """A bar per x for the swap round trip: its two legs stacked when
-    `split`, the swap out below and the swap in hatched on top; one solid
-    bar of the total otherwise."""
+    `split`, the swap out below and the swap in in a lighter shade on top;
+    one bar of the total otherwise. Hatched only for the baseline, as LROS
+    is plain in every figure."""
+    hatch = st.get("hatch", "")
     if not split:
-        ax.bar(x + off, out + inn, width=width, color=st["color"], hatch=st.get("hatch", ""),
+        ax.bar(x + off, out + inn, width=width, color=st["color"], hatch=hatch,
                edgecolor="black", linewidth=0.4, label=label, zorder=3)
         return
-    ax.bar(x + off, out, width=width, color=st["color"],
+    ax.bar(x + off, out, width=width, color=st["color"], hatch=hatch,
            edgecolor="black", linewidth=0.4, label=label, zorder=3)
-    ax.bar(x + off, inn, width=width, bottom=out, color=lighten(st["color"], 0.6),
-           edgecolor="black", linewidth=0.4, hatch="//", zorder=3)
+    ax.bar(x + off, inn, width=width, bottom=out, color=lighten(st["color"], 0.6), hatch=hatch,
+           edgecolor="black", linewidth=0.4, zorder=3)
 
 
 def style_axes(ax, disk, xlabel, title=None, compact=False):

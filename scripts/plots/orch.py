@@ -48,6 +48,9 @@ ARMS = [
 ]
 ARM_LABEL = {a: l for a, l, _ in ARMS}
 ARM_COLOR = {a: c for a, _, c in ARMS}
+# The baselines' bars hatched, LROS's plain, as in every figure.
+ARM_HATCH = {'host-fifo': LINUX_HATCH, 'host-prio': ALT_HATCH,
+             'slots-fifo': LINUX_HATCH, 'slots-prio': ALT_HATCH}
 MEM_LABEL = {'unbounded': 'weights fit', 'budget': 'weights budget'}
 PNG = False   # also write a PNG beside each PDF (--png), for a quick look
 
@@ -210,7 +213,8 @@ def tpot_background(df, tokens, mem, out_dir, tpot_target, arm_order):
     for i, arm in enumerate(arms):
         tps = [background_tps(df, mem, arm, apps=(app,)) for app in apps]
         xs = np.arange(len(apps)) + (i - (len(arms) - 1) / 2) * width
-        bx.bar(xs, tps, width, color=ARM_COLOR[arm], edgecolor='white', linewidth=0.3)
+        bx.bar(xs, tps, width, color=ARM_COLOR[arm], hatch=ARM_HATCH.get(arm, ''),
+               edgecolor='black', linewidth=0.4, zorder=3)
         for x, v in zip(xs, tps):
             bx.annotate(f"{v:.1f}", (x, v), xytext=(0, 1), textcoords='offset points', ha='center',
                         va='bottom', fontsize=FONTSIZE_ANNOTATION)
@@ -236,22 +240,31 @@ def tpot_background(df, tokens, mem, out_dir, tpot_target, arm_order):
         box = p.get_position()
         fig.text((box.x0 + box.x1) / 2, 0.01, caption, ha='center', va='bottom',
                  fontsize=FONTSIZE_AXIS_LABEL)
-    arm_legend(fig, arms)
+    arm_legend(fig, arms, bars=True)
     save_fig(fig, os.path.join(out_dir, f"orch-tpot-bg-{mem}.pdf"))
 
 
-def arm_legend(fig, arms, marker='o', extra=()):
+def arm_legend(fig, arms, marker='o', extra=(), bars=False):
     """The arms in a legend above the figure, read left to right then down;
     matplotlib fills a legend's columns top to bottom, so the entries are
-    reordered. `extra`: (handle, label) pairs after the arms."""
-    entries = [(plt.Line2D([], [], linestyle='none', marker=marker, markersize=4,
-                           color=ARM_COLOR[a]), ARM_LABEL[a]) for a in arms] + list(extra)
+    reordered. `extra`: (handle, label) pairs after the arms. `bars`: the
+    arms as bar swatches, with the baselines' hatch, for a figure that has
+    bars; as dots otherwise."""
+    from matplotlib.patches import Patch
+
+    def handle(a):
+        if bars:
+            return Patch(facecolor=ARM_COLOR[a], hatch=ARM_HATCH.get(a, ''), edgecolor='black',
+                         linewidth=0.4)
+        return plt.Line2D([], [], linestyle='none', marker=marker, markersize=4, color=ARM_COLOR[a])
+    entries = [(handle(a), ARM_LABEL[a]) for a in arms] + list(extra)
     ncol = min(3, len(entries))
     rows = -(-len(entries) // ncol)
     order = [entries[r * ncol + c] for c in range(ncol) for r in range(rows) if r * ncol + c < len(entries)]
     fig.legend([h for h, _ in order], [l for _, l in order], loc='lower center',
                bbox_to_anchor=(0.5, 1.0), ncol=ncol, fontsize=FONTSIZE_LEGEND,
-               frameon=False, handletextpad=0.2, columnspacing=1.0)
+               frameon=False, handletextpad=0.5 if bars else 0.2, columnspacing=1.0,
+               handlelength=1.3 if bars else 2.0)
 
 
 def log_ms_axis(ax):
@@ -537,9 +550,11 @@ def qos(stats, mem, out_dir, tpot_target):
     xs = np.arange(len(arms))
     for ax, (key, label, higher) in zip(axes[0], panels):
         r = s.set_index('arm').reindex(arms)
-        ax.bar(xs, r[key], 0.7, yerr=r[key + '_std'].fillna(0),
-               color=[ARM_COLOR[a] for a in arms], edgecolor='white', linewidth=0.3,
-               error_kw=dict(elinewidth=0.6, capsize=1.2))
+        bars = ax.bar(xs, r[key], 0.7, yerr=r[key + '_std'].fillna(0),
+                      color=[ARM_COLOR[a] for a in arms], edgecolor='black', linewidth=0.4,
+                      error_kw=dict(elinewidth=0.6, capsize=1.2))
+        for bar, a in zip(bars, arms):
+            bar.set_hatch(ARM_HATCH.get(a, ''))
         if key == 'chat_tpot':
             ax.scatter(xs, r['chat_p95'], marker='_', color='black', s=40, linewidths=0.8,
                        label='p95', zorder=3)
