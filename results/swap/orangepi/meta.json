@@ -1,0 +1,20 @@
+{
+  "experiment": "swap",
+  "target": "orangepi",
+  "platform": "rk3588",
+  "date": "2026-10-15T16:31:07+00:00",
+  "cores": "4-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 4,
+  "reps": 3,
+  "guest_rev": "7892dfef",
+  "guest_dirty": null,
+  "host_rev": "0a0a12a",
+  "swap": "/dev/zram0 partition 7.8G;",
+  "orchestrator": "orangepi5ultra",
+  "sweeps": [
+    "2026-10-14T17:47:17+00:00",
+    "2026-10-15T16:31:07+00:00"
+  ],
+  "notes": "Weight swapping on NVMe. 2026-10-14: four models with llama-batched-bench (-npl 1 -ntg 1,16 -npp 128), quotas 110/80/50/10. 2026-10-15: OLMoE with llama-cli on prompt.txt (128 sampled tokens, seed 1), quotas 110/80/50/30/20/10/5; the plots take these rows for OLMoE."
+}

@@ -17,6 +17,20 @@
 # with the same clang major as the guest (in the dev shell of this repo):
 #   nix develop --command cmake --build miniosv/app/llama.cpp/build-cpu-clang \
 #     --target llama-batched-bench
+# (and --target llama-cli for SWAP_FRONTEND=cli).
+#
+# Frontend (SWAP_FRONTEND):
+#   batched-bench  a synthetic prompt: the same token at every position, in
+#                  the prompt and in every decode step. Fine for a dense
+#                  model, which reads all its weights whatever the text; a
+#                  mixture of experts routes such input to the same few
+#                  experts, so its working set is far below the file.
+#   cli            llama-cli on real text (SWAP_CLI_PROMPT) with sampled
+#                  tokens, as the motivation runs: a mixture of experts then
+#                  routes as in use. The prompt reaches the guest on an ext4
+#                  data disk mounted at /root, the model being the second
+#                  drive. One row per run.
+#   just SWAP_FRONTEND=cli swap_sweep 3 8G paging olmoe-1b-7b-0924-instruct-q4_k_m.gguf nvme
 #
 # Dimensions (all swept, innermost last):
 #   run     repetition, so drift shows up as spread rather than as a trend
@@ -74,7 +88,8 @@
 # file is evicted with vmtouch before every run, on both sides.
 #
 # Output: bench/out/swap/<timestamp>/swap.csv, one row per batched-bench
-# table line (two per run: ntg=1 and ntg=16), calibration.csv with the
+# table line (two per run: ntg=1 and ntg=16) or one per llama-cli run (pp
+# and tg as its timings count them), calibration.csv with the
 # measured Linux overhead per model, and the raw console logs under
 # logs/<model>/<disk>/q<quota>/<config>/run<n>.{out,err}.txt (the calibration
 # run's log is logs/<model>/calibrate-linux.log). The figures go to
@@ -102,6 +117,11 @@ SWAP_LINUX_MARGIN := "64M"
 SWAP_BENCH_ARGS := "-npl 1 -ntg 1,16 -npp 128 -t 4"
 # The Linux side: the guest's llama.cpp tree, built with clang 20.
 SWAP_LINUX_BIN := LROS_PATH + "/app/llama.cpp/build-cpu-clang/bin/llama-batched-bench"
+SWAP_FRONTEND := "batched-bench"
+SWAP_CLI_BIN := LROS_PATH + "/app/llama.cpp/build-cpu-clang/bin/llama-cli"
+# The motivation's prompt and generation (scripts/motivation.just paging).
+SWAP_CLI_PROMPT := "The history of the printing press begins in the fifteenth century, when Johannes Gutenberg combined movable metal type, oil-based ink and a screw press adapted from wine making. Within fifty years presses operated in more than two hundred cities across Europe, and the cost of books fell sharply. Scholars, merchants and reformers used the new medium to spread ideas faster than any authority could control. Explain in detail how the printing press changed science, religion, politics and everyday life, and compare its effects with those of the internet."
+SWAP_CLI_ARGS := "-no-cnv -n 128 --ignore-eos --seed 1 -c 1024 -t 4"
 # Host cpus for both sides: the four A76 cores.
 SWAP_AFFINITY := "4-7"
 # Wall-clock cap per run (seconds); a wedged guest must not stall the sweep.
@@ -126,13 +146,36 @@ swap_sweep n_runs="3" size_mem="8G" variant="paging" models=SWAP_MODELS disks=SW
 			exit 1
 		fi
 	esac
+	guest_pin="-C f --cpu-strict 1 -Cb f --cpu-strict-batch 1"
+	# What runs on each side: host_bin $host_args -m <model>, and in the guest
+	# guest_cmd, with the drives in guest_drives ahead of the model's.
+	guest_drives=()
+	case "{{SWAP_FRONTEND}}" in
+		batched-bench)
+			host_bin="{{SWAP_LINUX_BIN}}"
+			host_args="$bench_args"
+			guest_cmd="batched-bench -m nvme:1 $bench_args $guest_pin"
+			;;
+		cli)
+			host_bin="{{SWAP_CLI_BIN}}"
+			stage="$out_dir/stage"; mkdir -p "$stage"
+			printf '%s' "{{SWAP_CLI_PROMPT}}" > "$stage/prompt.txt"
+			host_args="{{SWAP_CLI_ARGS}} -f $stage/prompt.txt"
+			guest_cmd="llama-cli -m nvme:2 {{SWAP_CLI_ARGS}} -f /root/prompt.txt $guest_pin"
+			case " {{configs}} " in *" lros-"*)
+				data="$out_dir/data.img"
+				MKDATA_ASSUME_YES=1 nix develop {{LROS_PATH}} --command bash {{LROS_PATH}}/scripts/mkdata.sh "$data" "$stage" 16M > "$out_dir/mkdata.log" 2>&1
+				guest_drives=(--emulated-nvme "$data")
+			esac
+			;;
+		*) echo "unknown SWAP_FRONTEND {{SWAP_FRONTEND}}: batched-bench or cli" >&2; exit 1 ;;
+	esac
 	case " {{configs}} " in *" linux-"*)
-		if [ ! -x "{{SWAP_LINUX_BIN}}" ]; then
-			echo "Missing {{SWAP_LINUX_BIN}} -- build it first, see the header of scripts/swap.just" >&2
+		if [ ! -x "$host_bin" ]; then
+			echo "Missing $host_bin -- build it first, see the header of scripts/swap.just" >&2
 			exit 1
 		fi
 	esac
-	guest_pin="-C f --cpu-strict 1 -Cb f --cpu-strict-batch 1"
 
 	# "16M" -> bytes
 	to_bytes() {
@@ -165,10 +208,33 @@ swap_sweep n_runs="3" size_mem="8G" variant="paging" models=SWAP_MODELS disks=SW
 		esac
 	}
 
-	# Parse a llama-batched-bench markdown table (on stdin) into CSV rows.
-	# Columns: | PP | TG | B | N_KV | T_PP s | S_PP | T_TG s | S_TG | T s | S |
-	# $1 = the fixed row prefix, $2 = status
+	# A run's console (on stdin) as CSV rows. $1 = the fixed row prefix,
+	# $2 = status.
 	to_csv() {
+		case "{{SWAP_FRONTEND}}" in
+			batched-bench) bench_to_csv "$@" ;;
+			cli)           cli_to_csv "$@" ;;
+		esac
+	}
+
+	# llama-cli's timings: "prompt eval time = <ms> ms / <n> tokens" and
+	# "eval time = <ms> ms / <n> runs", as one row in batched-bench's columns.
+	cli_to_csv() {
+		tr -d '\r' | awk -v prefix="$1" -v status="$2" '
+			/prompt eval time/ { pt = $6; pp = $9 }
+			/ +eval time/ && !/prompt/ { tt = $5; tg = $8 }
+			END {
+				if (pp && tg) {
+					t = (pt + tt) / 1000
+					printf "%s,%d,%d,1,%d,%.3f,%.2f,%.3f,%.2f,%.3f,%.2f,%s\n", prefix, pp, tg, pp + tg,
+						pt / 1000, pp * 1000 / pt, tt / 1000, tg * 1000 / tt, t, (pp + tg) / t, status
+				} else printf "%s,,,,,,,,,,,%s\n", prefix, status
+			}'
+	}
+
+	# Parse a llama-batched-bench markdown table into CSV rows.
+	# Columns: | PP | TG | B | N_KV | T_PP s | S_PP | T_TG s | S_TG | T s | S |
+	bench_to_csv() {
 		awk -F'|' -v prefix="$1" -v status="$2" '
 			/^\|[[:space:]]*[0-9]/ {
 				for (i = 1; i <= NF; i++) gsub(/[[:space:]]/, "", $i)
@@ -188,7 +254,7 @@ swap_sweep n_runs="3" size_mem="8G" variant="paging" models=SWAP_MODELS disks=SW
 	calibrate_linux() { # model_path log
 		local peak=0 pid rss
 		vmtouch -qe "$1"
-		taskset -c {{SWAP_AFFINITY}} {{SWAP_LINUX_BIN}} $bench_args -m "$1" > "$2" 2>&1 &
+		taskset -c {{SWAP_AFFINITY}} "$host_bin" $host_args -m "$1" < /dev/null > "$2" 2>&1 &
 		pid=$!
 		while kill -0 "$pid" 2>/dev/null; do
 			rss=$(awk '/^RssAnon:/ { print $2 }' "/proc/$pid/status" 2>/dev/null || true)
@@ -208,7 +274,7 @@ swap_sweep n_runs="3" size_mem="8G" variant="paging" models=SWAP_MODELS disks=SW
 		vmtouch -qe "$1"
 		systemd-run --user --scope -p MemoryMax="$2" -p MemorySwapMax=0 --quiet -- \
 			timeout -k 10 {{SWAP_TIMEOUT}} \
-			taskset -c {{SWAP_AFFINITY}} {{SWAP_LINUX_BIN}} $bench_args -m "$1" \
+			taskset -c {{SWAP_AFFINITY}} "$host_bin" $host_args -m "$1" \
 			< /dev/null > "$3" 2> "$4"
 	}
 	run_lros() { # model_path cache_kib paging_opts out err
@@ -216,16 +282,18 @@ swap_sweep n_runs="3" size_mem="8G" variant="paging" models=SWAP_MODELS disks=SW
 		timeout -k 10 {{SWAP_TIMEOUT}} \
 			taskset -c {{SWAP_AFFINITY}} python3 {{LROS_PATH}}/scripts/run.py \
 			--arch aarch64 -p kvm -c 4 -m {{size_mem}} --nogdb \
-			--image-path "$img" --emulated-nvme "$1" --nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
-			--args "--cache-size $2K $3 batched-bench -m nvme:1 $bench_args $guest_pin" \
+			--image-path "$img" "${guest_drives[@]}" --emulated-nvme "$1" \
+			--nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
+			--args "--cache-size $2K $3 $guest_cmd" \
 			< /dev/null > "$4" 2> "$5"
 	}
 
 	{
 		echo "timestamp $ts"
 		echo "image $img"
-		echo "host binary {{SWAP_LINUX_BIN}}"
-		echo "bench args $bench_args; guest $guest_pin"
+		echo "frontend {{SWAP_FRONTEND}}"
+		echo "host $host_bin $host_args"
+		echo "guest $guest_cmd"
 		echo "guest memory {{size_mem}}, cpus {{SWAP_AFFINITY}}"
 		echo "inflight {{SWAP_INFLIGHT}}, linux margin {{SWAP_LINUX_MARGIN}}, timeout {{SWAP_TIMEOUT}}s"
 		echo "models {{models}}"; echo "disks {{disks}}"; echo "configs {{configs}}"; echo "quotas {{quotas}}"
@@ -302,7 +370,7 @@ swap_sweep n_runs="3" size_mem="8G" variant="paging" models=SWAP_MODELS disks=SW
 		esac
 		status=$(status_of "$rc")
 		[ "$status" = ok ] || echo "  -> $status, see $err" >&2
-		to_csv "$prefix" "$status" < "$out" >> "$csv"
+		cat "$out" "$err" | to_csv "$prefix" "$status" >> "$csv"
 	done; done; done; done; done
 
 	echo "Wrote $csv"

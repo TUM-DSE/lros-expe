@@ -40,6 +40,16 @@ scripts/__pycache__
 !/results/sched-accel-lros/*/meta.json
 !/results/accel-perf/*/accel-perf.csv
 !/results/accel-perf/*/meta.json
+!/results/orch/*/orch.csv
+!/results/orch/*/meta.json
+!/results/orch/*/tokens.csv
+!/results/orch/*/width.csv
+!/results/orch/*/orch.trace
+!/results/swap/*/swap.csv
+!/results/swap/*/meta.json
+!/results/swap/*/prompt.txt
+!/results/kvswap/*/kvswap.csv
+!/results/kvswap/*/meta.json
 
 # The KV swap area image and host state file that `just kvswap_sweep` writes.
 bench/kvswap/

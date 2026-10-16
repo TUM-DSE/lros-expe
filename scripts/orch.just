@@ -8,10 +8,10 @@
 # Manual form (the guest), with the trace, the policies and the adapter in an
 # ext4 data image mounted at /root (miniosv/scripts/mkdata.sh):
 #   python3 miniosv/scripts/run.py --arch aarch64 -p kvm -c 4 -m 8G --nogdb \
-#     --image-path miniosv/build/orch.aarch64/loader.img \
+#     --image-path miniosv/build/paging.aarch64/loader.img \
 #     --emulated-nvme data.img --emulated-nvme <A.gguf> --emulated-nvme <B.gguf> \
-#     --nvme-cache none \
-#     --args "--cache-size 2G --buffer-size 2M --prefetch-depth 16 --pin-percent 90 \
+#     --nvme-cache none --nvme-aio io_uring --nvme-mdts 9 \
+#     --args "--cache-size 2G --per-tensor-buffers --pin-percent 1 --layer-prefetch \
 #             lros-serve -m nvme:2 --models nvme:2,nvme:2+/root/lora.gguf,nvme:3 \
 #             --trace /root/traces/orch.trace --mode lros --policy /root/policies/x.json \
 #             -t 4 -c 4608 -b 512 -ub 128 -np 8"
@@ -25,7 +25,7 @@
 #                       gets an equal share (the slot engines, which know no
 #                       roles)
 #   arm     host-fifo       the baselines, on the host: the same binary's slot
-#           host-prio       engine on Linux, pinned to the four A76 cores, the
+#           host-prio       engine on Linux, kept on the four A76 cores, the
 #                           models mmap'd and served by the kernel's page cache.
 #                           fifo: one pool of slots per model, arrival order,
 #                           the pools stepped in turn, what llama.cpp's
@@ -35,8 +35,9 @@
 #                           a step, what a vLLM/SGLang-like engine with
 #                           priorities does. Under the budget the
 #                           process runs in a memory cgroup of the budget plus
-#                           its own anonymous memory, so the kernel reclaims
-#                           the models' pages by its LRU, knowing no roles.
+#                           its own anonymous memory, without swap, so the
+#                           kernel reclaims the models' pages by its LRU,
+#                           knowing no roles.
 #           lros-default    the task path in the guest with no policy file:
 #                           the engine's built-in defaults (every task takes
 #                           every free core, priority order, a floor core
@@ -55,13 +56,15 @@
 #           slots-fifo      the slot engines inside the guest (not swept by
 #           slots-prio      default): the baselines on LROS's own page cache
 #
-# Every guest arm streams the same way (2 MiB buffers, 16 read ahead, 90% of
-# a window held as a prefix): the default page-at-a-time faulting makes no
-# progress at all on a squeezed model. The host arms read the models from
+# Every guest arm streams the same way (a buffer per tensor piece, each
+# model's first pieces in its use order pinned, its following layers read
+# ahead): the default page-at-a-time faulting makes no progress at all on a
+# squeezed model. The host arms read the models from
 # the same NVMe through the kernel, their page cache dropped before each run.
 #
 # Output: bench/out/orch/<timestamp>/orch.csv, one row per finished request
-# (scripts/parse.py apps), the trace and policies used, and the console logs
+# (scripts/parse.py apps), tokens.csv, one row per generated token, and
+# width.csv, the cores in use, the trace and policies used, and the console logs
 # under logs/<mem>/<arm>/run<n>. Figures: just plot_orch <csv>.
 #
 # With truncate=1 (the default, for quick numbers) the slot arms are stopped
@@ -75,20 +78,21 @@
 ORCH_ARMS := "lros-adaptive lros-fixed lros-default host-prio host-fifo"
 ORCH_MEMS := "budget unbounded"
 # The host arms: the clang build of the same lros-serve (just build linux
-# cpu-clang with LLAMA_CPP_TARGETS=llama-lros-serve), its threads pinned one
-# per A76 core (mask over the host's cpu numbers), and, under the budget, a
-# cgroup of the budget plus what the process holds beside the mapped weights:
+# cpu-clang with LLAMA_CPP_TARGETS=llama-lros-serve), its threads left to the
+# Linux scheduler on the A76 cores, and, under the budget, a cgroup of the
+# budget plus what the process holds beside the mapped weights:
 # its contexts, samplers and the loaded adapter. That figure is the peak
 # RssAnon of an unbounded run (998 MiB on 2026-09-24 with -c 4608 and 4 slots
 # per pool, plus some 20 MiB the kernel charges besides); every host run
-# records its own in logs/<mem>/<arm>/run<n>.rss.txt for a check.
+# records its own in logs/<mem>/<arm>/run<n>.rss.txt for a check. The cgroup
+# gets no swap (MemorySwapMax=0): the board swaps to zram, which would hold
+# the process's memory outside the budget and leave the weights more room.
 # The weights are mmap'd, so they sit in the kernel's page cache, which the
 # cgroup charges: the kernel then reclaims them by its LRU, with its own
 # readahead on the re-faults, nothing pinned. Note that llama.cpp populates
 # each mapping in full at load (MAP_POPULATE, WILLNEED), so under the budget
 # the first model is partly evicted again while the second one loads.
 ORCH_HOST_BIN := LROS_PATH + "/app/llama.cpp/build-cpu-clang/bin/llama-lros-serve"
-ORCH_HOST_MASK := "f0"
 ORCH_HOST_ANON_MB := "1024"
 ORCH_MODELS_DIR := "/scratch/orangepi/models"
 # Q8_0 for both: f16 decode is memory-bound past two cores on the A76s (raw
@@ -114,7 +118,11 @@ ORCH_DATA_DIR := "/scratch/orangepi/orch"
 # task contexts built.
 ORCH_CACHE_UNBOUNDED := "5G"
 ORCH_BUDGET_MB := "4096"
-ORCH_STREAM_ARGS := "--buffer-size 2M --prefetch-depth 16 --pin-percent 90"
+# How the guest pages the weights: a buffer per tensor piece (the pages two
+# tensors share are pieces of their own), each model's first pieces in its
+# use order pinned within its window, and the following layers read ahead by
+# that model's own use order.
+ORCH_STREAM_ARGS := "--per-tensor-buffers --pin-percent 1 --layer-prefetch"
 # Every request generates exactly its token count (no early stop), with a
 # fixed seed and greedy sampling: the work per turn is then the same in every
 # arm and run, whatever the model would have said.
@@ -135,7 +143,7 @@ ORCH_AFFINITY := "4-7"
 
 # truncate=1 stops a slot arm (host or guest) once its background is done and
 # one more chat turn through, for quick numbers; the evaluation runs with 0.
-orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEMS trace_args=ORCH_TRACE_ARGS truncate="1":
+orch_sweep n_runs="1" size_mem="10G" variant="paging" arms=ORCH_ARMS mems=ORCH_MEMS trace_args=ORCH_TRACE_ARGS truncate="1":
 	#!/usr/bin/env bash
 	set -euo pipefail
 
@@ -196,7 +204,7 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 		echo "guest memory {{size_mem}}, cpus {{ORCH_AFFINITY}}, timeout {{ORCH_TIMEOUT}}s"
 		echo "cache unbounded {{ORCH_CACHE_UNBOUNDED}}, budget {{ORCH_BUDGET_MB}} MiB, stream {{ORCH_STREAM_ARGS}}"
 		echo "serve {{ORCH_SERVE_ARGS}}, slots {{ORCH_SLOTS}}, chunk {{ORCH_CHUNK}}, floor foreground_prefill {{ORCH_FLOOR_PREFILL}}"
-		echo "host {{ORCH_HOST_BIN}}, mask {{ORCH_HOST_MASK}}, anon {{ORCH_HOST_ANON_MB}} MiB"
+		echo "host {{ORCH_HOST_BIN}}, unpinned on {{ORCH_AFFINITY}}, anon {{ORCH_HOST_ANON_MB}} MiB, no swap"
 		echo "arms {{arms}}"; echo "mems {{mems}}"; echo "trace args {{trace_args}}"
 		echo "git $(git -C {{proot}} rev-parse --short HEAD) miniosv $(git -C {{LROS_PATH}} rev-parse --short HEAD 2>/dev/null || echo '?') app $(git -C {{LROS_PATH}}/app/llama.cpp rev-parse --short HEAD 2>/dev/null || echo '?')"
 	} > "$out_dir/sweep.info"
@@ -215,6 +223,10 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 	# utilization figure of the plots.
 	width_csv="$out_dir/width.csv"
 	echo "timestamp,run,mem,arm,$(python3 -c 'import sys; sys.path.insert(0, "{{proot}}/scripts"); import parse; print(parse.WIDTH_HEADER)')" > "$width_csv"
+	# Every generated token's time since its request's arrival (scripts/
+	# parse.py tokens), for the per-token TPOT figure.
+	tokens_csv="$out_dir/tokens.csv"
+	echo "timestamp,run,mem,arm,$(python3 -c 'import sys; sys.path.insert(0, "{{proot}}/scripts"); import parse; print(parse.TOKENS_HEADER)')" > "$tokens_csv"
 
 	# mem outside arm: a partial sweep then holds every arm of one memory
 	# setting, which is a complete comparison.
@@ -231,13 +243,12 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 		pin="-C f --cpu-strict 1 -Cb f --cpu-strict-batch 1"
 		# The host arms: the same slot engine natively, the trace read from
 		# the staging directory, the models and the adapter from their files.
-		# The mask is over the host's cpu numbers.
-		hpin="-C {{ORCH_HOST_MASK}} --cpu-strict 1 -Cb {{ORCH_HOST_MASK}} --cpu-strict-batch 1"
+		# Its threads are left to the Linux scheduler within the A76 cores.
 		hmodels="$model_a,$model_a+{{ORCH_LORA}},$model_b"
 		htrace="--trace $stage/traces/orch.trace"
 		case "$arm" in
-			host-fifo)     serve="--models $hmodels $htrace --mode slots --fifo -np {{ORCH_SLOTS}} $hpin -m $model_a" ;;
-			host-prio)     serve="--models $hmodels $htrace --mode slots --chunk {{ORCH_CHUNK}} -np {{ORCH_SLOTS}} $hpin -m $model_a" ;;
+			host-fifo)     serve="--models $hmodels $htrace --mode slots --fifo -np {{ORCH_SLOTS}} -m $model_a" ;;
+			host-prio)     serve="--models $hmodels $htrace --mode slots --chunk {{ORCH_CHUNK}} -np {{ORCH_SLOTS}} -m $model_a" ;;
 			slots-fifo)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --fifo -np {{ORCH_SLOTS}} $pin" ;;
 			slots-prio)    serve="lros-serve -m nvme:2 --models $models $trace --mode slots --chunk {{ORCH_CHUNK}} -np {{ORCH_SLOTS}} $pin" ;;
 			lros-default)  serve="lros-serve -m nvme:2 --models $models $trace --mode lros" ;;
@@ -259,9 +270,11 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 		case "$arm" in
 			host-*)
 				# Under the budget, a cgroup of the budget plus the process's
-				# own memory: the kernel then reclaims the models' pages.
+				# own memory, with no swap: the kernel then reclaims the
+				# models' pages, and cannot make room for them by moving the
+				# process's own memory to the host's zram.
 				limit=()
-				[ "$mem" = budget ] && limit=(-p "MemoryMax=$(( {{ORCH_BUDGET_MB}} + {{ORCH_HOST_ANON_MB}} ))M")
+				[ "$mem" = budget ] && limit=(-p "MemoryMax=$(( {{ORCH_BUDGET_MB}} + {{ORCH_HOST_ANON_MB}} ))M" -p MemorySwapMax=0)
 				# Everything lros-serve logs goes to stderr; one file, like
 				# the guest's console.
 				timeout -k 10 {{ORCH_TIMEOUT}} \
@@ -325,6 +338,7 @@ orch_sweep n_runs="1" size_mem="10G" variant="orch" arms=ORCH_ARMS mems=ORCH_MEM
 			[ -n "$row" ] && { echo "$ts,$run,$mem,$arm,$row,$status" >> "$csv"; n=$((n + 1)); }
 		done < <(python3 {{proot}}/scripts/parse.py apps "$out")
 		python3 {{proot}}/scripts/parse.py width "$out" | sed "s/^/$ts,$run,$mem,$arm,/" >> "$width_csv"
+		python3 {{proot}}/scripts/parse.py tokens "$out" | sed "s/^/$ts,$run,$mem,$arm,/" >> "$tokens_csv"
 		echo "  -> $status, $n of $expect requests"
 	done; done; done
 

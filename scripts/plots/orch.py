@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The orchestration experiment, from a `just orch_sweep` run.
 
-Two figures per memory setting, under bench/plots/orch/:
+Per memory setting, under bench/plots/orch/:
 
   orch-timeline-<mem>   one panel per arm: every request as a bar from its
                         arrival to its completion, in a lane per app (chat,
@@ -12,6 +12,19 @@ Two figures per memory setting, under bench/plots/orch/:
                         its reading-speed target, its TTFT, and the share of
                         summarise and reply requests that met their deadline.
                         Averaged over the runs, with the spread.
+  orch-tpot-<mem>       every chat token's TPOT (its gap to the token before)
+                        as a dot, a jittered column per arm, against the
+                        reading-speed target. From the tokens.csv beside
+                        the orch.csv.
+  orch-chat-<mem>       the same TPOT columns on the left, and every turn's
+                        TTFT with its bound on a second axis on the right.
+  orch-tpot-bg-<mem>    in one column: the TPOT columns, and beside them
+                        each background app's throughput, the tokens it
+                        processed per second while one of its requests was
+                        pending, a bar per arm.
+  orch-background-<mem> every summarise and reply request's end-to-end
+                        latency as a share of its deadline, a column per
+                        arm, with the share on time above each column.
 
     python3 orch.py <orch.csv> [...] [-o out_dir]
 """
@@ -21,8 +34,8 @@ import os
 from common import *
 
 APPS = ['chat', 'summarise', 'reply']
-APP_LABEL = {'chat': 'Chat (fg)', 'summarise': 'Summarise (bg)', 'reply': 'Reply (bg, LoRA)'}
-APP_LABEL_PAPER = {'chat': 'Chat', 'summarise': 'Summarise', 'reply': 'Reply'}
+APP_LABEL = {'chat': 'Chat (fg)', 'summarise': 'Summarize (bg)', 'reply': 'Reply (bg, LoRA)'}
+APP_LABEL_PAPER = {'chat': 'Chat', 'summarise': 'Summarize', 'reply': 'Reply'}
 # Fixed order and colour per arm, never cycled.
 ARMS = [
     ('host-fifo',     'llama.cpp (Linux)',        LINUX_COLOR),
@@ -35,6 +48,9 @@ ARMS = [
 ]
 ARM_LABEL = {a: l for a, l, _ in ARMS}
 ARM_COLOR = {a: c for a, _, c in ARMS}
+# The baselines' bars hatched, LROS's plain, as in every figure.
+ARM_HATCH = {'host-fifo': LINUX_HATCH, 'host-prio': ALT_HATCH,
+             'slots-fifo': LINUX_HATCH, 'slots-prio': ALT_HATCH}
 MEM_LABEL = {'unbounded': 'weights fit', 'budget': 'weights budget'}
 PNG = False   # also write a PNG beside each PDF (--png), for a quick look
 
@@ -42,7 +58,8 @@ PNG = False   # also write a PNG beside each PDF (--png), for a quick look
 def save_fig(fig, path):
     save_path(fig, path)
     if PNG:
-        fig.savefig(path[:-4] + '.png', dpi=130)
+        # Tight like the PDF, or a legend placed above the axes is cut off.
+        fig.savefig(path[:-4] + '.png', dpi=130, bbox_inches='tight', pad_inches=0.012)
 
 
 def load(csvs):
@@ -85,6 +102,288 @@ def load_width(csvs):
                 width_of[key] = int(x.cores)
             out[(mem, arm, run)] = total   # CPU seconds: cores computing, integrated
     return out
+
+
+def load_tokens(csvs, df):
+    """Every chat token's gap to the one before it (ms), from the tokens.csv
+    beside each orch.csv, with the request's mem, arm and run; the first
+    token of a turn is its TTFT and has no gap. Empty when no tokens.csv
+    exists."""
+    frames = []
+    for c in csvs:
+        path = os.path.join(os.path.dirname(os.path.abspath(c)), 'tokens.csv')
+        if os.path.exists(path):
+            frames.append(pd.read_csv(path))
+    if not frames:
+        return pd.DataFrame(columns=['mem', 'arm', 'run', 'gap_ms'])
+    t = pd.concat(frames, ignore_index=True)
+    key = ['timestamp', 'run', 'mem', 'arm', 'req']
+    chat = df[df.app == 'chat'][key].drop_duplicates()
+    t = t.merge(chat, on=key)
+    t = t.sort_values(key + ['i'])
+    t['gap_ms'] = t.groupby(key)['t_ms'].diff()
+    return t.dropna(subset=['gap_ms'])
+
+
+def draw_tpot(ax, g, arms, tpot_target, compact=False):
+    """Every chat token's TPOT in `g`, one jittered column of dots per arm,
+    against the reading-speed target, on a log axis without x ticks.
+    `compact`: for a panel half a column wide -- in seconds, labelled at
+    the decades only, the target and its value inside the axes and no y
+    label (the panel's caption names it); otherwise in ms at 1-2-5 steps, the target
+    named outside on the right."""
+    scale = 1000 if compact else 1
+    rng = np.random.default_rng(1)
+    for i, arm in enumerate(arms):
+        y = g[g.arm == arm].gap_ms.to_numpy() / scale
+        x = i + rng.uniform(-0.3, 0.3, len(y))
+        ax.scatter(x, y, s=2.5, color=ARM_COLOR[arm], alpha=0.6, linewidths=0, rasterized=True,
+                   zorder=3)
+    target = tpot_target / scale
+    ax.axhline(target, color='black', linewidth=0.7, linestyle='--', zorder=2)
+    # A crawling arm reaches seconds; a log axis keeps the others readable.
+    log_ms_axis(ax)
+    if compact:
+        ax.yaxis.set_major_locator(ticker.LogLocator(base=10))
+        ax.yaxis.set_minor_locator(ticker.LogLocator(base=10, subs=np.arange(2, 10) * 0.1))
+        ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+        # From the decade below the target, so that it is labelled too.
+        ax.set_ylim(bottom=10 ** np.floor(np.log10(target)))
+        # Inside, above the line at its right end, on a light backing where
+        # a column's dots run behind it.
+        ax.annotate(f"target {tpot_target:.0f} ms", (1.0, target), xycoords=('axes fraction', 'data'),
+                    xytext=(-1, 2), textcoords='offset points', ha='right', va='bottom',
+                    fontsize=FONTSIZE_ANNOTATION, zorder=4,
+                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.8, pad=0.4))
+    else:
+        ax.set_ylabel('Chat TPOT (ms)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
+        # Outside the axes on the right, clear of every column's dots.
+        ax.annotate('target', (1.0, target), xycoords=('axes fraction', 'data'), xytext=(2, 0),
+                    textcoords='offset points', ha='left', va='center', fontsize=FONTSIZE_ANNOTATION)
+    ax.set_xticks([])
+    ax.set_xlim(-0.6, len(arms) - 0.4)
+    ax.grid(axis='y', which='major', linewidth=0.3, alpha=0.5)
+    thin_spines(ax)
+
+
+def tpot_scatter(tokens, mem, out_dir, tpot_target, arm_order):
+    """Every chat token's TPOT, one jittered column of dots per arm in
+    `arm_order`, against the reading-speed target; the arms named in a
+    legend rather than on the x axis."""
+    g = tokens[tokens.mem == mem]
+    arms = [a for a in arm_order if (g.arm == a).any()]
+    if not arms:
+        return
+    fig, ax = plt.subplots(figsize=(figwidth_half, 1.4))
+    draw_tpot(ax, g, arms, tpot_target)
+    fig.tight_layout(pad=0.2)
+    arm_legend(fig, arms)
+    save_fig(fig, os.path.join(out_dir, f"orch-tpot-{mem}.pdf"))
+
+
+def background_tps(df, mem, arm, apps=('summarise', 'reply')):
+    """The background's throughput: the tokens the `apps` processed (prompt
+    and generated) per second of the time any of their requests was
+    pending, arrival to completion. Over the whole run instead, the
+    open-loop trace would set the rate, not the arm."""
+    b = df[(df.mem == mem) & (df.arm == arm) & df.app.isin(apps)]
+    if b.empty:
+        return np.nan
+    busy, end = 0.0, -np.inf
+    for t0, t1 in sorted(zip(b.t_arrive_s, b.t_done_s)):
+        busy += max(0.0, t1 - max(t0, end))
+        end = max(end, t1)
+    return (b.prompt + b.gen).sum() / busy
+
+
+def tpot_background(df, tokens, mem, out_dir, tpot_target, arm_order):
+    """Half a column each: the chat's TPOT dots on the left, each
+    background app's throughput (background_tps over its own requests) as
+    a group of bars, one per arm, on the right, under one legend of the
+    arms."""
+    g = tokens[tokens.mem == mem]
+    arms = [a for a in arm_order if (g.arm == a).any()]
+    if not arms:
+        return
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(figwidth_half, 1.4))
+    draw_tpot(ax, g, arms, tpot_target, compact=True)
+    apps = ['summarise', 'reply']
+    width = 0.8 / len(arms)
+    top = 0.0
+    for i, arm in enumerate(arms):
+        tps = [background_tps(df, mem, arm, apps=(app,)) for app in apps]
+        xs = np.arange(len(apps)) + (i - (len(arms) - 1) / 2) * width
+        bx.bar(xs, tps, width, color=ARM_COLOR[arm], hatch=ARM_HATCH.get(arm, ''),
+               edgecolor='black', linewidth=0.4, zorder=3)
+        for x, v in zip(xs, tps):
+            bx.annotate(f"{v:.1f}", (x, v), xytext=(0, 1), textcoords='offset points', ha='center',
+                        va='bottom', fontsize=FONTSIZE_ANNOTATION)
+        top = max(top, np.nanmax(tps))
+    bx.set_xticks(np.arange(len(apps)))
+    bx.set_xticklabels([APP_LABEL_PAPER[a] for a in apps], fontsize=FONTSIZE_TICK_LABEL)
+    bx.tick_params(axis='x', length=0)
+    bx.set_xlim(-0.5, len(apps) - 0.5)
+    bx.set_ylim(0, top * 1.2)
+    bx.grid(axis='y', linewidth=0.3, alpha=0.5)
+    thin_spines(bx)
+    # The direction that is better above each panel, right-aligned; each
+    # panel's caption names its quantity, so no y labels.
+    for p, higher in [(ax, False), (bx, True)]:
+        p.annotate(higher_better_str if higher else lower_better_str, xy=(1, 1),
+                   xycoords='axes fraction', xytext=(0, 1), textcoords='offset points',
+                   ha='right', va='bottom', color='blue', fontsize=FONTSIZE_ANNOTATION)
+    # The captions on one line under both panels, below the background's
+    # tick labels, whether or not a panel has x tick labels.
+    panel_caption(ax, '(a) Chat TPOT (s)', y=-0.16)
+    panel_caption(bx, '(b) Background (tok/s)', y=-0.16)
+    fig.tight_layout(pad=0.2, w_pad=0.8)
+    arm_legend(fig, arms, bars=True)
+    save_fig(fig, os.path.join(out_dir, f"orch-tpot-bg-{mem}.pdf"))
+
+
+def arm_legend(fig, arms, marker='o', extra=(), bars=False):
+    """The arms in a legend above the figure, read left to right then down;
+    matplotlib fills a legend's columns top to bottom, so the entries are
+    reordered. `extra`: (handle, label) pairs after the arms. `bars`: the
+    arms as bar swatches, with the baselines' hatch, for a figure that has
+    bars; as dots otherwise."""
+    from matplotlib.patches import Patch
+
+    def handle(a):
+        if bars:
+            return Patch(facecolor=ARM_COLOR[a], hatch=ARM_HATCH.get(a, ''), edgecolor='black',
+                         linewidth=0.4)
+        return plt.Line2D([], [], linestyle='none', marker=marker, markersize=4, color=ARM_COLOR[a])
+    entries = [(handle(a), ARM_LABEL[a]) for a in arms] + list(extra)
+    ncol = min(3, len(entries))
+    rows = -(-len(entries) // ncol)
+    order = [entries[r * ncol + c] for c in range(ncol) for r in range(rows) if r * ncol + c < len(entries)]
+    fig.legend([h for h, _ in order], [l for _, l in order], loc='lower center',
+               bbox_to_anchor=(0.5, 1.0), ncol=ncol, fontsize=FONTSIZE_LEGEND,
+               frameon=False, handletextpad=0.5 if bars else 0.2, columnspacing=1.0,
+               handlelength=1.3 if bars else 2.0)
+
+
+def log_ms_axis(ax):
+    # Labelled at 1-2-5 steps, in plain numbers: log labels in math text
+    # cost seconds per save.
+    ax.set_yscale('log')
+    ax.yaxis.set_major_locator(ticker.LogLocator(base=10, subs=(1, 2, 5)))
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:g}"))
+    ax.yaxis.set_minor_locator(ticker.NullLocator())
+
+
+def chat_scatter(df, tokens, mem, out_dir, tpot_target, arm_order):
+    """The chat in one plot: on the left every token's TPOT, a jittered
+    column per arm on a log axis against the reading-speed target; on the
+    right every turn's TTFT, a column per arm on its own axis (the right
+    one), the turns in order across the column, each with its bound (the
+    TTFT the turn's prompt length allowed) as a dash."""
+    g = tokens[tokens.mem == mem]
+    c = df[(df.mem == mem) & (df.app == 'chat')]
+    arms = [a for a in arm_order if (g.arm == a).any() or (c.arm == a).any()]
+    if not arms:
+        return
+    n = len(arms)
+    fig, ax = plt.subplots(figsize=(figwidth_half, 1.5))
+    ax2 = ax.twinx()
+    rng = np.random.default_rng(1)
+    for i, arm in enumerate(arms):
+        y = g[g.arm == arm].gap_ms.to_numpy()
+        ax.scatter(i + rng.uniform(-0.3, 0.3, len(y)), y, s=2.5, color=ARM_COLOR[arm], alpha=0.6,
+                   linewidths=0, rasterized=True, zorder=3)
+        t = c[c.arm == arm].sort_values('turn')
+        n_turns = max(1, int(c.turn.max()) + 1)
+        x = n + 1 + i + (t.turn.to_numpy() - (n_turns - 1) / 2) * (0.6 / max(1, n_turns - 1))
+        ax2.scatter(x, t.ttft_target_s, marker='_', s=12, color='black', linewidths=0.6, zorder=2)
+        ax2.scatter(x, t.ttft_s, s=7, color=ARM_COLOR[arm], linewidths=0, zorder=3)
+    ax.axhline(tpot_target, xmax=(n - 0.4 + 0.6) / (2 * n + 1.2), color='black', linewidth=0.7,
+               linestyle='--', zorder=2)
+    ax.annotate('target', (n - 0.45, tpot_target), xytext=(0, 1.5), textcoords='offset points',
+                ha='right', va='bottom', fontsize=FONTSIZE_ANNOTATION)
+    ax.axvline(n + 0.5, color='0.6', linewidth=0.5)
+    log_ms_axis(ax)
+    ax.set_xlim(-0.6, 2 * n + 0.6)
+    ax.set_xticks([(n - 1) / 2, n + 1 + (n - 1) / 2])
+    ax.set_xticklabels(['TPOT, every token', 'TTFT, every turn'], fontsize=FONTSIZE_TICK_LABEL)
+    ax.tick_params(axis='x', length=0)
+    ax.set_ylabel('Chat TPOT (ms)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
+    ax2.set_ylabel('Chat TTFT (s)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=2)
+    ax2.set_ylim(0, None)
+    ax2.tick_params(labelsize=FONTSIZE_TICK_LABEL)
+    ax.grid(axis='y', which='major', linewidth=0.3, alpha=0.5)
+    thin_spines(ax, hide=('top',))
+    thin_spines(ax2, hide=('top',))
+    fig.tight_layout(pad=0.2)
+    bound = plt.Line2D([], [], linestyle='none', marker='_', markersize=5, markeredgewidth=0.6,
+                       color='black')
+    arm_legend(fig, arms, extra=[(bound, 'TTFT bound of the turn')])
+    save_fig(fig, os.path.join(out_dir, f"orch-chat-{mem}.pdf"))
+
+
+def load_deadlines(csvs, given):
+    """Each background app's deadline (s): from the `@app` lines of the
+    trace beside each orch.csv (orch.trace in a results/ directory,
+    stage/traces/orch.trace in a sweep's), overridden by `given`
+    ("app=s,..."), for a CSV with no trace beside it."""
+    out = {}
+    for c in csvs:
+        here = os.path.dirname(os.path.abspath(c))
+        path = next((p for p in (os.path.join(here, 'orch.trace'),
+                                 os.path.join(here, 'stage/traces/orch.trace')) if os.path.exists(p)), None)
+        if path is None:
+            continue
+        for line in open(path):
+            f = line.split()
+            if len(f) > 1 and f[0] == '@app':
+                kv = dict(x.split('=', 1) for x in f[2:] if '=' in x)
+                if 'deadline_ms' in kv:
+                    out[f[1]] = int(kv['deadline_ms']) / 1000
+    for x in filter(None, (given or '').split(',')):
+        app, s = x.split('=')
+        out[app] = float(s)
+    return out
+
+
+def background_scatter(df, mem, out_dir, arm_order, deadline_s):
+    """The two background apps: every request's end-to-end latency as a
+    share of its deadline, a jittered column per arm within each app, the
+    deadline at 100 %, and the share that met it above each column."""
+    d = df[(df.mem == mem) & df.app.isin(['summarise', 'reply'])]
+    arms = [a for a in arm_order if (d.arm == a).any()]
+    if not arms or not all(app in deadline_s for app in ['summarise', 'reply']):
+        return
+    fig, ax = plt.subplots(figsize=(figwidth_half, 1.4))
+    rng = np.random.default_rng(1)
+    n = len(arms)
+    ticks = []
+    for j, app in enumerate(['summarise', 'reply']):
+        a = d[d.app == app]
+        x0 = j * (n + 1)
+        ticks.append(x0 + (n - 1) / 2)
+        for i, arm in enumerate(arms):
+            r = a[a.arm == arm]
+            y = r.e2e_s.to_numpy() / deadline_s[app] * 100
+            ax.scatter(x0 + i + rng.uniform(-0.3, 0.3, len(y)), y, s=5, color=ARM_COLOR[arm],
+                       alpha=0.8, linewidths=0, zorder=3)
+            ax.annotate(f"{(r.deadline == 'met').mean() * 100:.0f}{PCT}", (x0 + i, 1.0),
+                        xycoords=('data', 'axes fraction'), xytext=(0, 1), textcoords='offset points',
+                        ha='center', va='bottom', fontsize=FONTSIZE_ANNOTATION)
+    ax.axhline(100, color='black', linewidth=0.7, linestyle='--', zorder=2)
+    ax.annotate('deadline', (1.0, 100), xycoords=('axes fraction', 'data'), xytext=(2, 0),
+                textcoords='offset points', ha='left', va='center', fontsize=FONTSIZE_ANNOTATION)
+    ax.set_xlim(-0.6, 2 * n + 0.6)
+    ax.set_ylim(0, None)
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([f"{APP_LABEL_PAPER[a]} ({deadline_s[a]:.0f} s)" for a in ['summarise', 'reply']],
+                       fontsize=FONTSIZE_TICK_LABEL)
+    ax.tick_params(axis='x', length=0)
+    ax.set_ylabel(f'Latency ({PCT} of deadline)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
+    ax.grid(axis='y', linewidth=0.3, alpha=0.5)
+    thin_spines(ax)
+    fig.tight_layout(pad=0.2, rect=(0, 0, 1, 0.94))
+    arm_legend(fig, arms)
+    save_fig(fig, os.path.join(out_dir, f"orch-background-{mem}.pdf"))
 
 
 def summarise(df):
@@ -239,8 +538,8 @@ def qos(stats, mem, out_dir, tpot_target):
         ('chat_tpot',   'Chat TPOT (ms)',           False),
         ('chat_buffer', 'Chat display buffer (ms)', False),
         ('chat_ttft',   'Chat TTFT (ms)',           False),
-        ('summ_met',    'Summarise on time (%)',    True),
-        ('reply_met',   'Reply on time (%)',        True),
+        ('summ_met',    f'Summarize on time ({PCT})', True),
+        ('reply_met',   f'Reply on time ({PCT})',     True),
     ]
     if s.chat_buffer.isna().all():
         panels = [p for p in panels if p[0] != 'chat_buffer']
@@ -248,9 +547,11 @@ def qos(stats, mem, out_dir, tpot_target):
     xs = np.arange(len(arms))
     for ax, (key, label, higher) in zip(axes[0], panels):
         r = s.set_index('arm').reindex(arms)
-        ax.bar(xs, r[key], 0.7, yerr=r[key + '_std'].fillna(0),
-               color=[ARM_COLOR[a] for a in arms], edgecolor='white', linewidth=0.3,
-               error_kw=dict(elinewidth=0.6, capsize=1.2))
+        bars = ax.bar(xs, r[key], 0.7, yerr=r[key + '_std'].fillna(0),
+                      color=[ARM_COLOR[a] for a in arms], edgecolor='black', linewidth=0.4,
+                      error_kw=dict(elinewidth=0.6, capsize=1.2))
+        for bar, a in zip(bars, arms):
+            bar.set_hatch(ARM_HATCH.get(a, ''))
         if key == 'chat_tpot':
             ax.scatter(xs, r['chat_p95'], marker='_', color='black', s=40, linewidths=0.8,
                        label='p95', zorder=3)
@@ -286,6 +587,7 @@ def main():
     ap.add_argument('--paper', action='store_true',
                     help='the timeline for the paper: legend, no annotations, waits as lines (-paper suffix)')
     ap.add_argument('--arms', help='comma-separated arms to draw, in this order (default: all present)')
+    ap.add_argument('--deadlines', help='app=s,... the background deadlines, for CSVs without a trace beside them')
     a = ap.parse_args()
     if a.arms:
         keep = a.arms.split(',')
@@ -320,8 +622,16 @@ def main():
             'summ_met', 'summ_e2e', 'reply_met', 'reply_e2e', 'bg_tps']
     print(stats[cols].to_string(index=False, float_format=lambda v: f"{v:.1f}"))
     util = load_width(a.csvs)
+    tokens = load_tokens(a.csvs, df)
+    deadlines = load_deadlines(a.csvs, a.deadlines)
     for mem in df.mem.unique():
         timeline(df, mem, a.out_dir, a.ttft_target, paper=a.paper, util=util)
+        # LROS first, its headline arm leftmost, unless --arms gave an order.
+        order = [t[0] for t in ARMS] if a.arms else [t[0] for t in reversed(ARMS)]
+        tpot_scatter(tokens, mem, a.out_dir, a.tpot_target, order)
+        chat_scatter(df, tokens, mem, a.out_dir, a.tpot_target, order)
+        tpot_background(df, tokens, mem, a.out_dir, a.tpot_target, order)
+        background_scatter(df, mem, a.out_dir, order, deadlines)
         if not a.paper:
             qos(stats, mem, a.out_dir, a.tpot_target)
 

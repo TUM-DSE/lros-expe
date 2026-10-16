@@ -96,6 +96,18 @@ def parse_args():
                    "(default: bench/plots/kvswap/)")
     p.add_argument("--configs", default=None,
                    help="comma-separated configs to plot, in this order (default: all)")
+    p.add_argument("--height", type=float, default=fig_height,
+                   help=f"figure height in inches (default {fig_height:g}, as every plot)")
+    # Every figure in every layout is 72 files per three models, a few
+    # minutes on the board; these pick what is wanted.
+    p.add_argument("--figures", default=None,
+                   help="comma-separated figures to draw (default: all of %s)" % ", ".join(FIGURES))
+    p.add_argument("--models", default=None,
+                   help="comma-separated models to draw, file names without .gguf (default: all)")
+    p.add_argument("--layouts", default=",".join(LAYOUTS),
+                   help="comma-separated layouts: wide (both disks), column (both disks in one "
+                        "column), disk (each disk alone in one column) (default: all)")
+    p.add_argument("--no-png", action="store_true", help="write the PDFs only")
     return p.parse_args()
 
 
@@ -162,25 +174,27 @@ def ordered(values, order):
 
 
 def leg_patches():
-    """Legend entries for the two legs of a stacked bar: the lower, solid
-    part is the swap out, the hatched part on top the swap in."""
+    """Legend entries for the two legs of a stacked bar: the lower part in
+    the arm's colour is the swap out, the lighter part on top the swap in."""
     return ([mpatches.Patch(facecolor="0.5", edgecolor="black", linewidth=0.4),
-             mpatches.Patch(facecolor="0.85", edgecolor="black", linewidth=0.4, hatch="//")],
-            ["swap out (lower)", "swap in (upper, hatched)"])
+             mpatches.Patch(facecolor=lighten("0.5", 0.6), edgecolor="black", linewidth=0.4)],
+            ["swap out (lower)", "swap in (upper, lighter)"])
 
 
 def stacked_bars(ax, x, off, width, out, inn, st, label, split=True):
     """A bar per x for the swap round trip: its two legs stacked when
-    `split`, the swap out below and the swap in hatched on top; one solid
-    bar of the total otherwise."""
+    `split`, the swap out below and the swap in in a lighter shade on top;
+    one bar of the total otherwise. Hatched only for the baseline, as LROS
+    is plain in every figure."""
+    hatch = st.get("hatch", "")
     if not split:
-        ax.bar(x + off, out + inn, width=width, color=st["color"], hatch=st.get("hatch", ""),
+        ax.bar(x + off, out + inn, width=width, color=st["color"], hatch=hatch,
                edgecolor="black", linewidth=0.4, label=label, zorder=3)
         return
-    ax.bar(x + off, out, width=width, color=st["color"],
+    ax.bar(x + off, out, width=width, color=st["color"], hatch=hatch,
            edgecolor="black", linewidth=0.4, label=label, zorder=3)
-    ax.bar(x + off, inn, width=width, bottom=out, color=lighten(st["color"], 0.6),
-           edgecolor="black", linewidth=0.4, hatch="//", zorder=3)
+    ax.bar(x + off, inn, width=width, bottom=out, color=lighten(st["color"], 0.6), hatch=hatch,
+           edgecolor="black", linewidth=0.4, zorder=3)
 
 
 def style_axes(ax, disk, xlabel, title=None, compact=False):
@@ -188,9 +202,9 @@ def style_axes(ax, disk, xlabel, title=None, compact=False):
     a short x label, or the two panels' text collides."""
     if compact:
         xlabel = xlabel.replace("Context length N (tokens)", "N (tokens)")
-        title = DISK_LABEL.get(disk, disk)
+    # The disk alone, as the weight figures title their panels.
     ax.set_xlabel(xlabel, fontsize=FONTSIZE_AXIS_LABEL)
-    ax.set_title(title or "KV swapped to %s" % DISK_LABEL.get(disk, disk), fontsize=FONTSIZE_TITLE)
+    ax.set_title(title or DISK_LABEL.get(disk, disk), fontsize=FONTSIZE_TITLE, pad=2)
     ax.tick_params(labelsize=FONTSIZE_TICK_LABEL)
     thin_spines(ax)
 
@@ -285,7 +299,8 @@ def draw_partial(df, disks, axes, configs, compact=False, split=True):
     Each disk on its own y axis: eMMC is an order of magnitude slower, and on
     a shared axis the NVMe bars would be slivers."""
     partial = df[df["keep_pct"] >= 0]
-    keeps = np.sort(partial["keep_pct"].unique())
+    # The largest share kept on the left, as the weight figures order quotas.
+    keeps = np.sort(partial["keep_pct"].unique())[::-1]
     ns = sorted(partial["n"].unique())
     # The state file has no partial form: it always moves the whole KV, so
     # its full-swap rows at the same N stand in every group.
@@ -328,7 +343,7 @@ def draw_partial(df, disks, axes, configs, compact=False, split=True):
             ax.text(0.02, 0.97, text, transform=ax.transAxes, ha="left", va="top",
                     fontsize=FONTSIZE_ANNOTATION, color="0.35")
         ax.set_xticks(x)
-        ax.set_xticklabels(["%d%%" % k for k in keeps], fontsize=FONTSIZE_TICK_LABEL)
+        ax.set_xticklabels(["%d%s" % (k, PCT) for k in keeps], fontsize=FONTSIZE_TICK_LABEL)
         ax.grid(True, axis="y", linewidth=0.3, alpha=0.5, zorder=0)
         style_axes(ax, disk, "KV kept resident", compact=compact)
         # Room above the tallest bar for the recompute note, three lines of
@@ -355,31 +370,44 @@ FIGURES = {
 }
 
 
-def render(kind, df, model, out_dir, configs):
-    """One figure in its four layouts: both disks full width, both fitted
-    into one column, and each disk alone in one column."""
+LAYOUTS = ("wide", "column", "disk")
+
+
+def render(kind, df, model, out_dir, configs, height=fig_height, which=LAYOUTS, png=True):
+    """One figure in the layouts `which` names: wide, both disks full width;
+    column, both fitted into one column; disk, each disk alone in one
+    column."""
     drawer, sharey = FIGURES[kind]
     disks = ordered(df["disk"], DISK_ORDER)
     kind_dir = os.path.join(out_dir, kind, model)
-    layouts = [(disks, False, kind_dir, kind)]
-    if len(disks) > 1:
+    layouts = []
+    if "wide" in which:
+        layouts.append((disks, False, kind_dir, kind))
+    if "column" in which and len(disks) > 1:
         layouts.append((disks, True, os.path.join(kind_dir, "single-column"), kind))
-    for disk in disks:
-        layouts.append(([disk], True, os.path.join(kind_dir, "single-column"), "%s_%s" % (kind, disk)))
+    if "disk" in which:
+        for disk in disks:
+            layouts.append(([disk], True, os.path.join(kind_dir, "single-column"), "%s_%s" % (kind, disk)))
 
     for panels, single_column, directory, name in layouts:
         fig_w = figwidth_half if single_column else figwidth_half * len(panels)
-        fig, axes = plt.subplots(1, len(panels), sharey=sharey, figsize=(fig_w, fig_height))
+        fig, axes = plt.subplots(1, len(panels), sharey=sharey, figsize=(fig_w, height))
         axes = np.atleast_1d(axes)
         compact = single_column and len(panels) > 1
         handles, labels = drawer(df[df["disk"].isin(panels)], panels, axes, configs, compact)
+        # Times are better low; only the ratio is better high.
+        for ax in axes:
+            better_hint(ax, higher=(kind == "mem-kv-ratio"), inside=True)
         # The wide layout takes the whole legend in one row of four; a column
         # holds two entries per row.
         ncol = 2 if single_column else min(4, len(labels))
-        rows = -(-len(labels) // ncol)
-        fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 1.0 + 0.02 * rows),
-                   ncol=ncol, fontsize=FONTSIZE_LEGEND, frameon=False)
-        save(fig, name + ".pdf", directory, png=True)
+        # Laid out first, then the legend right above the panels, as the
+        # weight figures do.
+        fig.tight_layout(pad=0.1)
+        fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.98),
+                   ncol=ncol, fontsize=FONTSIZE_LEGEND, frameon=False,
+                   handlelength=1.4, handleheight=0.8, columnspacing=1.2, handletextpad=0.4)
+        save(fig, name + ".pdf", directory, png=png)
 
 
 def main():
@@ -389,7 +417,22 @@ def main():
     if df.empty:
         sys.exit("no successful rows in %s" % ", ".join(paths))
     out_dir = args.out_dir or kvswap_plots_dir
-    for model in sorted(df["model"].unique()):
+    kinds = args.figures.split(",") if args.figures else list(FIGURES)
+    unknown = set(kinds) - set(FIGURES)
+    if unknown:
+        sys.exit("unknown figure(s) %s; one of %s" % (", ".join(sorted(unknown)), ", ".join(FIGURES)))
+    which = args.layouts.split(",")
+    if set(which) - set(LAYOUTS):
+        sys.exit("--layouts takes %s" % ", ".join(LAYOUTS))
+    models = sorted(df["model"].unique())
+    if args.models:
+        models = [m for m in args.models.split(",") if m in models]
+
+    def draw(kind, rows, model, configs):
+        if kind in kinds:
+            render(kind, rows, model, out_dir, configs, args.height, which, png=not args.no_png)
+
+    for model in models:
         sub = df[df["model"] == model]
         # The ordinary runs' configs, and the mechanisms of the partial rows:
         # a CSV of `just kvswap_partial` alone has no ordinary LROS rows.
@@ -407,12 +450,12 @@ def main():
                         ns, med, lo, hi = agg(s, "ratio")
                         print("  %-5s %-16s %s" % (disk, cfg, crossover(ns, med)))
             for kind in ("mem-kv-cost", "mem-kv-ratio", "mem-kv-legs", "mem-kv-legs-total"):
-                render(kind, full, model, out_dir, configs)
+                draw(kind, full, model, configs)
         # All rows: the partial figure takes its state-file bar and the
         # recompute reference from the ordinary runs at the same N.
         if (sub["keep_pct"] >= 0).any():
-            render("mem-kv-partial", sub, model, out_dir, configs)
-            render("mem-kv-partial-total", sub, model, out_dir, configs)
+            draw("mem-kv-partial", sub, model, configs)
+            draw("mem-kv-partial-total", sub, model, configs)
 
 
 if __name__ == "__main__":
