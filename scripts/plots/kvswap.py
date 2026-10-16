@@ -395,6 +395,9 @@ def render(kind, df, model, out_dir, configs, height=fig_height, which=LAYOUTS, 
         axes = np.atleast_1d(axes)
         compact = single_column and len(panels) > 1
         handles, labels = drawer(df[df["disk"].isin(panels)], panels, axes, configs, compact)
+        # Times are better low; only the ratio is better high.
+        for ax in axes:
+            better_hint(ax, higher=(kind == "mem-kv-ratio"), inside=True)
         # The wide layout takes the whole legend in one row of four; a column
         # holds two entries per row.
         ncol = 2 if single_column else min(4, len(labels))

@@ -233,12 +233,16 @@ def format_big_numbers(x, pos=None):
         return f'{x:.0f}'
 
 
-def better_hint(ax, higher: bool = False, xy=(0.0, 1.02)):
-    """The blue hint above the axes telling which direction is good."""
+def better_hint(ax, higher: bool = False, xy=(0.0, 1.02), inside=False):
+    """The blue hint above the axes telling which direction is good, or with
+    `inside` in the axes' top right corner."""
+    if inside:
+        xy = (1.0, 1.0)
     ax.annotate(higher_better_str if higher else lower_better_str,
                 color='blue', xy=xy, xycoords='axes fraction',
-                va='bottom', annotation_clip=False,
-                fontsize=FONTSIZE_ANNOTATION)
+                xytext=(-2, -2) if inside else (0, 0), textcoords='offset points',
+                ha='right' if inside else 'left', va='top' if inside else 'bottom',
+                annotation_clip=False, fontsize=FONTSIZE_ANNOTATION)
 
 
 def panel_caption(ax, text: str, y: float = -0.30):

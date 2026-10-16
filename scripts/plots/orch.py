@@ -232,14 +232,11 @@ def tpot_background(df, tokens, mem, out_dir, tpot_target, arm_order):
         p.annotate(higher_better_str if higher else lower_better_str, xy=(1, 1),
                    xycoords='axes fraction', xytext=(0, 1), textcoords='offset points',
                    ha='right', va='bottom', color='blue', fontsize=FONTSIZE_ANNOTATION)
-    # Room at the bottom for the captions, on one line under both panels
-    # whether or not a panel has x tick labels.
-    caption_h = 0.12
-    fig.tight_layout(pad=0.2, w_pad=0.8, rect=(0, caption_h, 1, 1))
-    for p, caption in [(ax, '(a) Chat TPOT (s)'), (bx, '(b) Background (tok/s)')]:
-        box = p.get_position()
-        fig.text((box.x0 + box.x1) / 2, 0.01, caption, ha='center', va='bottom',
-                 fontsize=FONTSIZE_AXIS_LABEL)
+    # The captions on one line under both panels, below the background's
+    # tick labels, whether or not a panel has x tick labels.
+    panel_caption(ax, '(a) Chat TPOT (s)', y=-0.16)
+    panel_caption(bx, '(b) Background (tok/s)', y=-0.16)
+    fig.tight_layout(pad=0.2, w_pad=0.8)
     arm_legend(fig, arms, bars=True)
     save_fig(fig, os.path.join(out_dir, f"orch-tpot-bg-{mem}.pdf"))
 

@@ -125,8 +125,7 @@ def row(ax, segments, title, unit, fewer="less", legend=True, hint=False):
         ax.annotate(left_better_str, xy=(1, 0), xycoords='axes fraction', xytext=(-2, 2),
                     textcoords='offset points', ha='right', va='bottom', color='blue',
                     fontsize=FONTSIZE_ANNOTATION)
-    ax.annotate(title, xy=(0.5, 0), xycoords='axes fraction', xytext=(0, -TICKS_H * 72),
-                textcoords='offset points', ha='center', va='top', fontsize=FONTSIZE_AXIS_LABEL)
+    panel_caption(ax, title, y=-TICKS_H / AXES_H)
 
 
 PANELS = [  # segments, title, unit, fewer, legend

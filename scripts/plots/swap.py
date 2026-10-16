@@ -171,9 +171,11 @@ def draw_panel(ax, sub, configs, metric, budgets, ylim, title, short_cut_label=F
     cut = x[fits][-1] + 0.5 if (~fits).any() and fits.any() else None
     if cut is not None:
         ax.axvline(cut, color="0.35", linestyle="--", linewidth=0.7, zorder=2)
-        ax.text(cut + 0.08, 0.96, "does not fit" if short_cut_label else "model does not fit",
-                transform=ax.get_xaxis_transform(), ha="left", va="top",
-                fontsize=FONTSIZE_ANNOTATION, color="0.35")
+        # A line down, under the "better" hint in the top right corner.
+        ax.annotate("does not fit" if short_cut_label else "model does not fit",
+                    xy=(cut + 0.08, 1.0), xycoords=ax.get_xaxis_transform(),
+                    xytext=(0, -FONTSIZE_ANNOTATION - 4), textcoords="offset points",
+                    ha="left", va="top", fontsize=FONTSIZE_ANNOTATION, color="0.35")
 
     # Bars are the median over runs, so one disturbed run cannot move a
     # cell; the error bars span the runs' min and max.
@@ -248,12 +250,11 @@ def plot_panels(panels, metric, out_dir, name, only_configs=None, single_column=
 
     # The largest quota on the left, down to the smallest.
     all_budgets = np.sort(df["budget"].unique())[::-1]
-    cuts = []
     for ax, (sub, title) in zip(axes, panels):
         budgets = all_budgets if sharey else np.sort(sub["budget"].unique())[::-1]
         ylim = axis_range(df if sharey else sub, metric, budgets)
-        cuts.append(draw_panel(ax, sub, configs, metric, budgets, ylim, title,
-                               short_cut_label=single_column))
+        draw_panel(ax, sub, configs, metric, budgets, ylim, title,
+                   short_cut_label=single_column)
         if not single_column:
             ax.set_xlabel(QUOTA_LABEL, fontsize=FONTSIZE_AXIS_LABEL)
 
@@ -261,11 +262,8 @@ def plot_panels(panels, metric, out_dir, name, only_configs=None, single_column=
         # One label under both panels; per-panel labels would collide.
         fig.supxlabel(QUOTA_LABEL, fontsize=FONTSIZE_AXIS_LABEL, y=-0.02)
     axes[0].set_ylabel(METRIC_LABEL[metric], fontsize=FONTSIZE_AXIS_LABEL)
-    # Clear of the bars that run off the top on the left: under the "does
-    # not fit" label when there is one.
-    x0, x1 = axes[0].get_xlim()
-    hint_x = (cuts[0] + 0.08 - x0) / (x1 - x0) if cuts[0] is not None else 0.03
-    better_hint(axes[0], higher=True, xy=(hint_x, 0.78 if cuts[0] is not None else 0.86))
+    for ax in axes:
+        better_hint(ax, higher=True, inside=True)
 
     handles, labels = axes[0].get_legend_handles_labels()
     # One row across a wide figure; a column holds three entries per row,
