@@ -81,8 +81,23 @@ exec "\$@"
 EOF
     tgt_push "$LOCAL_TMP/guest-$TARGET.sh" "bin/guest.sh"
     tgt_sh "chmod +x '$T_SCRATCH/bin/guest.sh'"
+    exp_check_nvme_link
     exp_has_accel || [ -z "${TGT_VACCEL_ENV[$TARGET]}" ] \
         || exp_warn "$TARGET is missing accelerator paths; vAccel arms will not run"
+}
+
+# Dies when an NVMe drive of the target trained its PCIe link below what both
+# ends support, which caps every read from it.
+exp_check_nvme_link() {
+    local slow
+    slow=$(tgt_sh 'for c in /sys/class/nvme/nvme*; do
+        d=$(readlink -f $c/device); [ -r $d/current_link_speed ] || continue
+        cur=$(cut -d" " -f1 $d/current_link_speed); dev=$(cut -d" " -f1 $d/max_link_speed)
+        port=$(cut -d" " -f1 ${d%/*}/max_link_speed 2>/dev/null || echo $dev)
+        awk -v c=$cur -v d=$dev -v p=$port "BEGIN {exit !(c < (d < p ? d : p))}" \
+            && echo "${c##*/} at $cur GT/s, capable of $dev GT/s behind a $port GT/s port"
+    done; true')
+    [ -z "$slow" ] || exp_die "degraded NVMe link on $TARGET: $slow"
 }
 
 # Puts the target's models in its scratch: moved from where the target keeps
@@ -349,7 +364,11 @@ exp_cache_opt() {
 # Echoes the out paths.
 exp_nix_build() {
     local attrs="" a out
-    for a in "$@"; do attrs="$attrs '$T_REPO#${a#.#}'"; done
+    # A builder shares this checkout's /home; the target's own checkout is
+    # where the target builds.
+    local repo="$T_REPO"
+    [ -n "$T_BUILDER" ] && repo="$EXP_ROOT"
+    for a in "$@"; do attrs="$attrs '$repo#${a#.#}'"; done
     local cmd="nix build --no-link --print-out-paths $(exp_cache_opt) $attrs"
     if [ -z "$T_BUILDER" ]; then
         tgt_sh "$cmd" || { exp_warn "nix build failed on $TARGET"; return 1; }

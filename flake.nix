@@ -1,6 +1,12 @@
 {
   description = "Flake to build simple Linux VMs";
 
+  # The chair's binary cache before cache.nixos.org, for what this flake builds.
+  nixConfig = {
+    extra-substituters = [ "https://cache.dos.cit.tum.de" ];
+    extra-trusted-public-keys = [ "cache.dos.cit.tum.de-1:ZCSRbf/HsV0XwrrfR4dC6HyrjqwqKXmR/hDPsYyZ9Sg=" ];
+  };
+
   inputs =
     {
       nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";

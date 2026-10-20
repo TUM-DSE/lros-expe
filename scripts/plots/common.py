@@ -141,8 +141,8 @@ hatch_def = [
 ]
 
 # Qualitative base colours (ColorBrewer Set1/Paired), one hue per role.
-LROS_COLOR = '#1F78B4'          # blue  -- our system, everywhere
-LINUX_COLOR = '#9E9E9E'         # grey  -- unmodified llama.cpp on Linux
+LROS_COLOR = '#9FC5E8'          # pastel blue   -- our system, everywhere
+LINUX_COLOR = '#F9CB9C'         # pastel orange -- unmodified llama.cpp on Linux
 CPU_COLOR = '#984EA3'           # purple -- CPU-only execution
 NATIVE_COLOR = '#4DAF4A'        # green -- native host / upper bound
 ALT_COLOR = '#FF7F00'           # orange -- the other competitor in a panel

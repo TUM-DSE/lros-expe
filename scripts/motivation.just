@@ -11,16 +11,16 @@ MOE := "olmoe-1b-7b-0924-instruct-q4_k_m.gguf"
 PAGING_MODELS := DENSE + "," + MOE
 
 [doc('(b) the next token after a KV cache left memory: the state file of llama.cpp on Linux against LROS')]
-kvswap target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" lengths="512,1024,2048,4096,8192" keeps="0,90" reps="3" page="64K":
+kvswap target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" lengths="512,1024,2048,4096,8192" keeps="0,90" reps="3" page="64K" recompute="1":
 	#!/usr/bin/env bash
 	source {{LIB}}; exp_target {{target}}
 	exp_setup
 	exp_begin mot-kvswap "exp,target,platform,arm,keep,n,rep,kv_mb,t_pp,t_dec,t_out,mb_out,t_in,mb_in,t_dec2"
-	export EXP_NO_DROP=1 EXP_TIMEOUT=3600 EXP_NVME_CACHE=none
+	export EXP_NO_DROP=1 EXP_TIMEOUT=${EXP_TIMEOUT:-3600} EXP_NVME_CACHE=none
 	model=$(exp_model {{model}}) nt=$(exp_ncores)
 	bench="-fa -t $nt --lengths {{lengths}} --reps {{reps}}"
 	cpu=$(exp_build_host cpu-clang llama-kv-bench) || exp_die "no host build"
-	gpu=$(exp_build_host "$T_ACCEL" llama-kv-bench) || exp_die "no host $T_ACCEL build"
+	if [ {{recompute}} = 1 ]; then gpu=$(exp_build_host "$T_ACCEL" llama-kv-bench) || exp_die "no host $T_ACCEL build"; fi
 	remote=$(exp_ship_image cpu "$(exp_build_guest cpu 0 1)")
 	area="$T_SCRATCH/kvswap/area.img"
 	tgt_sh "mkdir -p '$T_SCRATCH/kvswap'; [ -s '$area' ] || fallocate -l 1G '$area'"
@@ -36,8 +36,10 @@ kvswap target="joy" model="Llama-3.2-1B-Instruct-f16.gguf" lengths="512,1024,204
 	exp_host linux-file 1 "'$cpu/llama-kv-bench' -m '$model' $bench -C $(exp_cpu_mask) --cpu-strict 1 \
 	  --swap file --swap-file '$T_SCRATCH/kvswap/state.bin'"
 	rows linux ""
-	EXP_HOST_ENV="${TGT_HOST_ACCEL_ENV[$TARGET]}" exp_host recompute-gpu 1 "'$gpu/llama-kv-bench' -m '$model' $bench -ngl 99 --swap none"
-	rows recompute-gpu ""
+	if [ {{recompute}} = 1 ]; then
+	  EXP_HOST_ENV="${TGT_HOST_ACCEL_ENV[$TARGET]}" exp_host recompute-gpu 1 "'$gpu/llama-kv-bench' -m '$model' $bench -ngl 99 --swap none"
+	  rows recompute-gpu ""
+	fi
 	# LROS: the KV in a page-cache window over a raw NVMe area, squeezed to
 	# the share that stays and read back in bulk before the decode.
 	for k in $(echo {{keeps}} | tr ',' ' '); do

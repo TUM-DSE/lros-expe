@@ -1,0 +1,15 @@
+{
+  "experiment": "sched-cpu",
+  "target": "orangepi",
+  "platform": "rk3588",
+  "date": "2026-10-20T10:17:40+00:00",
+  "cores": "4-7",
+  "guest_mem": "8G",
+  "guest_vcpus": 4,
+  "reps": 3,
+  "guest_rev": "2021c297a",
+  "guest_dirty": false,
+  "host_rev": "c572d9d",
+  "swap": "/dev/zram0 partition 7.8G;",
+  "orchestrator": "irene"
+}

@@ -61,6 +61,8 @@ plot_paper out=(source_directory() / "../../lros_paper/plots"):
 	cd {{source_directory()}}/plots
 	export PLOT_USETEX=1   # the paper's figures are typeset by LaTeX
 	python3 accel-perf.py "$out/accel-perf.pdf" $R/accel-perf/*/accel-perf.csv
+	# The evaluation's two full-width figures, from the panels of the ones above.
+	python3 paper-eval.py "$out" $R
 	python3 unikernel.py -o "$tmp/unikernel"
 	cp "$tmp/unikernel/unikernel-micro.pdf" "$out/unikernel-micro.pdf"
 	echo "Wrote the paper's figures to $out"

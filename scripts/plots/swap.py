@@ -278,61 +278,66 @@ def plot_panels(panels, metric, out_dir, name, only_configs=None, single_column=
     save(fig, name + ".pdf", out_dir, png=png)
 
 
-args = parse_args()
-paths = args.csv or [newest_sweep_csv()]
-out_dir = args.out_dir or swap_plots_dir
-data = load(paths, args.metric, args.ntg)
-for spec in args.quotas:
-    model, _, pcts = spec.partition("=")
-    keep = {float(p) for p in pcts.split(",")}
-    of_model = data["model"] == model + ".gguf"
-    data = data[~of_model | data["quota_pct"].astype(float).isin(keep)]
-if data.empty:
-    sys.exit("no usable rows (status ok with the requested metric)")
-models = sorted(data["model"].unique())
-if args.models:
-    models = [m for m in models if os.path.splitext(m)[0] in args.models.split(",")]
-layouts = set(args.layouts.split(",")) - {"none"}
-if layouts - {"wide", "column", "disk"}:
-    sys.exit("--layouts takes wide, column, disk or none")
-png = not args.no_png
-only = args.configs.split(",") if args.configs else None
-# Up to four layouts of the figure per model, under mem-weights-tp/<model>/:
-# both disks side by side at one column per panel (wide), both fitted into
-# one column (column), and each disk alone in one column (disk; the last two
-# in single-column/).
-FIGURE = "mem-weights-tp"
-for m in models if layouts else []:
-    sub = data[data["model"] == m]
-    disks = [d for d in DISK_ORDER if d in set(sub["disk"])] + \
-            sorted(set(sub["disk"]) - set(DISK_ORDER))
-    by_disk = [(sub[sub["disk"] == d], DISK_LABEL.get(d, d)) for d in disks]
-    model_dir = os.path.join(out_dir, FIGURE, os.path.splitext(m)[0])
-    column_dir = os.path.join(model_dir, "single-column")
-    if "wide" in layouts:
-        plot_panels(by_disk, args.metric, model_dir, FIGURE, only_configs=only, height=args.height,
-                    png=png)
-    if "column" in layouts and len(disks) > 1:
-        plot_panels(by_disk, args.metric, column_dir, FIGURE, only_configs=only, single_column=True,
-                    height=args.height, png=png)
-    if "disk" in layouts:
-        for panel, d in zip(by_disk, disks):
-            plot_panels([panel], args.metric, column_dir, f"{FIGURE}_{d}", only_configs=only,
-                        single_column=True, height=args.height, png=png)
+def main():
+    args = parse_args()
+    paths = args.csv or [newest_sweep_csv()]
+    out_dir = args.out_dir or swap_plots_dir
+    data = load(paths, args.metric, args.ntg)
+    for spec in args.quotas:
+        model, _, pcts = spec.partition("=")
+        keep = {float(p) for p in pcts.split(",")}
+        of_model = data["model"] == model + ".gguf"
+        data = data[~of_model | data["quota_pct"].astype(float).isin(keep)]
+    if data.empty:
+        sys.exit("no usable rows (status ok with the requested metric)")
+    models = sorted(data["model"].unique())
+    if args.models:
+        models = [m for m in models if os.path.splitext(m)[0] in args.models.split(",")]
+    layouts = set(args.layouts.split(",")) - {"none"}
+    if layouts - {"wide", "column", "disk"}:
+        sys.exit("--layouts takes wide, column, disk or none")
+    png = not args.no_png
+    only = args.configs.split(",") if args.configs else None
+    # Up to four layouts of the figure per model, under mem-weights-tp/<model>/:
+    # both disks side by side at one column per panel (wide), both fitted into
+    # one column (column), and each disk alone in one column (disk; the last two
+    # in single-column/).
+    FIGURE = "mem-weights-tp"
+    for m in models if layouts else []:
+        sub = data[data["model"] == m]
+        disks = [d for d in DISK_ORDER if d in set(sub["disk"])] + \
+                sorted(set(sub["disk"]) - set(DISK_ORDER))
+        by_disk = [(sub[sub["disk"] == d], DISK_LABEL.get(d, d)) for d in disks]
+        model_dir = os.path.join(out_dir, FIGURE, os.path.splitext(m)[0])
+        column_dir = os.path.join(model_dir, "single-column")
+        if "wide" in layouts:
+            plot_panels(by_disk, args.metric, model_dir, FIGURE, only_configs=only, height=args.height,
+                        png=png)
+        if "column" in layouts and len(disks) > 1:
+            plot_panels(by_disk, args.metric, column_dir, FIGURE, only_configs=only, single_column=True,
+                        height=args.height, png=png)
+        if "disk" in layouts:
+            for panel, d in zip(by_disk, disks):
+                plot_panels([panel], args.metric, column_dir, f"{FIGURE}_{d}", only_configs=only,
+                            single_column=True, height=args.height, png=png)
 
-# Two models side by side on one disk, each on its own y axis.
-for pair in args.pair:
-    names = pair.split(",")
-    if len(names) != 2:
-        sys.exit(f"--pair {pair}: two model names, comma-separated")
-    panels = []
-    for n in names:
-        rows = data[(data["model"] == n + ".gguf") & (data["disk"] == args.pair_disk)]
-        if rows.empty:
-            sys.exit(f"--pair: no rows for {n} on {args.pair_disk}")
-        panels.append((rows, MODEL_LABEL.get(n, n)))
-    pair_dir = os.path.join(out_dir, FIGURE, "pairs")
-    plot_panels(panels, args.metric, pair_dir, "__".join(names),
-                only_configs=only, height=args.height, sharey=False, png=png)
-    plot_panels(panels, args.metric, os.path.join(pair_dir, "single-column"), "__".join(names),
-                only_configs=only, single_column=True, height=args.height, sharey=False, png=png)
+    # Two models side by side on one disk, each on its own y axis.
+    for pair in args.pair:
+        names = pair.split(",")
+        if len(names) != 2:
+            sys.exit(f"--pair {pair}: two model names, comma-separated")
+        panels = []
+        for n in names:
+            rows = data[(data["model"] == n + ".gguf") & (data["disk"] == args.pair_disk)]
+            if rows.empty:
+                sys.exit(f"--pair: no rows for {n} on {args.pair_disk}")
+            panels.append((rows, MODEL_LABEL.get(n, n)))
+        pair_dir = os.path.join(out_dir, FIGURE, "pairs")
+        plot_panels(panels, args.metric, pair_dir, "__".join(names),
+                    only_configs=only, height=args.height, sharey=False, png=png)
+        plot_panels(panels, args.metric, os.path.join(pair_dir, "single-column"), "__".join(names),
+                    only_configs=only, single_column=True, height=args.height, sharey=False, png=png)
+
+
+if __name__ == "__main__":
+    main()

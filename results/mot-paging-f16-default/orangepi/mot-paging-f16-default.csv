@@ -1,0 +1,14 @@
+exp,target,platform,model,quota_pct,quota_mb,anon_mb,model_mb,rep,pp,tg,t_pp,s_pp,t_tg,s_tg,majflt,read_mb,rss_mb,lck_mb
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,none,0,125,2364,0,103,127,1.095,94.05,15.828,8.02,125,2369,2489,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,10,361,125,2364,1,103,127,2.620,39.31,176.397,0.72,3054028,298387,357,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,25,716,125,2364,1,103,127,2.305,44.69,170.619,0.74,3224213,289427,711,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,50,1307,125,2364,1,103,127,2.309,44.61,157.617,0.81,2833066,261762,1299,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,75,1898,125,2364,1,103,127,2.250,45.79,147.395,0.86,2651751,247599,1888,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,10,361,125,2364,2,103,127,2.641,39.01,178.612,0.71,2997430,300295,357,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,25,716,125,2364,2,103,127,2.269,45.40,165.545,0.77,3225354,285272,711,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,50,1307,125,2364,2,103,127,2.311,44.57,158.354,0.80,2811394,263190,1299,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,75,1898,125,2364,2,103,127,2.268,45.42,140.897,0.90,2582797,236241,1888,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,10,361,125,2364,3,103,127,2.609,39.47,177.223,0.72,3023986,299338,357,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,25,716,125,2364,3,103,127,2.272,45.34,167.186,0.76,3191392,287924,710,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,50,1307,125,2364,3,103,127,2.333,44.16,155.530,0.82,2830079,262281,1299,0
+mot-paging-f16-default,orangepi,rk3588,Llama-3.2-1B-Instruct-f16.gguf,75,1898,125,2364,3,103,127,2.279,45.19,142.815,0.89,2533787,237261,1888,0

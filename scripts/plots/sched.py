@@ -11,9 +11,11 @@ from common import *
 
 READING_TPS = 4.8   # 240 words per minute, Brysbaert 2019
 
+PRIO_COLOR = '#B6D7A8'   # pastel green -- llama.cpp with priorities
 ARMS = [
-    ('fifo', 'llama.cpp', LINUX_COLOR, LINUX_HATCH),
-    ('lros', 'LROS',      LROS_COLOR,  LROS_HATCH),
+    ('fifo',             'llama.cpp',              LINUX_COLOR, LINUX_HATCH),
+    ('priority-chunked', 'llama.cpp + priorities', PRIO_COLOR,  ALT_HATCH),
+    ('lros',             'LROS',                   LROS_COLOR,  LROS_HATCH),
 ]
 DEVICE = {'orin': 'GPU', 'rk3588': 'NPU'}
 
@@ -96,7 +98,7 @@ def reading_speed(ax):
 
 # Under each load, in a row of its own below the axis: how long a background
 # request takes to complete, from arrival to its last token, under LROS against
-# llama.cpp at that load, what LROS costs the background for serving the
+# llama.cpp with priorities at that load, what LROS costs the background for serving the
 # interactive requests first.
 BG_COLOR = '#4D4D4D'
 
@@ -106,16 +108,16 @@ def background_cost(ax, s):
     below = mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
     for x, fill in enumerate(loads.index):
         d = s[s.fill == fill].set_index('arm')
-        if 'lros' not in d.index:
+        if 'lros' not in d.index or 'priority-chunked' not in d.index:
             continue
-        ratio = d.bgct['lros'] / d.bgct['fifo']
+        ratio = d.bgct['lros'] / d.bgct['priority-chunked']
         pct = (ratio - 1) * 100
         text = (f"{ratio:.1f}$\\times$" if ratio >= 2
                 else f"{pct:+.0f}\\%" if USETEX else f"{pct:+.0f}%")
         ax.annotate(text, (x, 0), xycoords=below, xytext=(0, -12),
                     textcoords='offset points', ha='center', va='top',
                     fontsize=FONTSIZE_TICK_LABEL, color=BG_COLOR)
-    ax.annotate('background\ncompletion time,\nLROS vs\nllama.cpp:', (0, 0), xycoords='axes fraction',
+    ax.annotate('background\ncompletion time,\nLROS vs llama.cpp\n+ priorities:', (0, 0), xycoords='axes fraction',
                 xytext=(-3, -12), textcoords='offset points', ha='right', va='top',
                 linespacing=0.9,
                 fontsize=FONTSIZE_ANNOTATION, color=BG_COLOR)
