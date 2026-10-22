@@ -2,14 +2,14 @@
 """Figure for the "Unikernel" evaluation subsection.
 
   unikernel-micro.pdf  the three microbenchmarks the methodology describes:
-                       boot time split by phase, image size and the memory
-                       footprint touched during boot plus engine startup.
+                       boot time split by phase, kernel image size and the
+                       memory footprint touched during boot plus engine
+                       startup.
 
 Boot time and memory come from `just boottime` (bench/out/boottime/
 boottime.csv, mean over runs), image sizes from `just imgsize`.
-LROS has no separate user space and the
-Linux VM boots without firmware (direct -kernel boot), so those segments
-are zero by construction rather than missing data.
+LROS has no separate user space, so its userspace segment is zero by
+construction rather than missing data.
 """
 from common import *
 
@@ -32,29 +32,23 @@ def phase_s(col):
     return np.array([mean.at[c, col] for c in CONFIGS]) / 1e3
 
 
-# ---- boot time [s], split into the phases the methodology traces -----------
+# ---- boot time [s]: everything up to the end of kernel init, then userspace -
+# Hypervisor startup, firmware and kernel init are one segment: the split
+# says little next to the userspace Linux needs and LROS does not.
 BOOT = {
-    "Hypervisor": phase_s("qemu_ms"),
-    "Firmware":   phase_s("firmware_ms"),
-    "Kernel":     phase_s("kernel_ms"),
-    "Userspace":  phase_s("init_ms"),
+    "VM + kernel boot": phase_s("qemu_ms") + phase_s("firmware_ms") + phase_s("kernel_ms"),
+    "Userspace":        phase_s("init_ms"),
 }
-# ---- image size [GB]: Linux needs a root filesystem next to the kernel -----
-# `just imgsize`; only kernel and rootfs are plotted: the lros `image` row
-# (loader.img) is the fixed 64 MiB ESP padding mkuefi.sh wraps around the
-# loader, and `bootloader` (the 7.7 KiB UEFI stub) would be an invisible
-# sliver -- both stay in the CSV only
+# ---- kernel image size [MB] ------------------------------------------------
+# `just imgsize`; only the kernels are compared. Linux's rootfs, the lros
+# `image` row (loader.img, the fixed 64 MiB ESP padding mkuefi.sh wraps
+# around the loader) and `bootloader` (the 7.7 KiB UEFI stub) stay in the
+# CSV only.
 img = pd.read_csv(os.path.join(result_dir, "boottime", "imgsize.csv"))
 img = img.set_index(["config", "component"])["size_bytes"]
 
-
-def seg_gb(component):
-    return np.array([img.get((c, component), 0) for c in CONFIGS]) / 2**30
-
-
 IMAGE = {
-    "Kernel / unikernel": seg_gb("kernel"),
-    "Root filesystem":    seg_gb("rootfs"),
+    "Kernel": np.array([img[(c, "kernel")] for c in CONFIGS]) / 2**20,
 }
 # ---- memory touched until the engine is up [MB] ----------------------------
 # One figure per system, not split, so no legend.
@@ -63,14 +57,13 @@ MEMORY = {
 }
 
 # Shade (how far lightened) and hatch per segment, over each system's colour:
-# Linux in greys, LROS in blues. The legend shows the grey shades, as they
-# stand for the segment in either. The image's kernel and root filesystem
-# take the look of the boot's kernel and userspace phases they belong to.
+# Linux in oranges, LROS in blues. The legend shows the shades in grey, as
+# they stand for the segment in either system. Single-segment panels are
+# solid.
 SYSTEM_COLOR = [LINUX_COLOR, LROS_COLOR]  # in SYSTEMS order
-_SHADES = [(0.0, ''), (0.30, '..'), (0.55, 'xx'), (0.78, '//')]
-SEG_STYLE = dict(zip(BOOT, _SHADES))
-SEG_STYLE.update({"Kernel / unikernel": _SHADES[2], "Root filesystem": _SHADES[3],
-                  "Memory footprint": _SHADES[0]})
+LEGEND_COLOR = '#A6A6A6'
+SEG_STYLE = {"VM + kernel boot": (0.0, ''), "Userspace": (0.6, '//'),
+             "Memory footprint": (0.0, ''), "Kernel": (0.0, '')}
 
 
 def amount(total, unit):
@@ -97,7 +90,7 @@ def row(ax, segments, title, unit, fewer="less", legend=True, hint=False):
         shade, hatch = SEG_STYLE[name]
         ax.barh(y, vals, left=left, height=0.62, color=[lighten(c, shade) for c in SYSTEM_COLOR],
                 hatch=hatch, edgecolor='black', linewidth=0.4, zorder=3)
-        handles.append(mpatches.Patch(facecolor=lighten(LINUX_COLOR, shade), hatch=hatch,
+        handles.append(mpatches.Patch(facecolor=lighten(LEGEND_COLOR, shade), hatch=hatch,
                                       edgecolor='black', linewidth=0.4, label=name))
         left = left + vals
     totals = left
@@ -136,7 +129,7 @@ def row(ax, segments, title, unit, fewer="less", legend=True, hint=False):
 PANELS = [  # segments, title, unit, fewer, legend
     (BOOT, "(a) Boot time (s)", "s", "less", True),
     (MEMORY, "(b) Memory touched (MB)", "MB", "less", False),
-    (IMAGE, "(c) Image size (GB)", "GB", "smaller", True),
+    (IMAGE, "(c) Kernel image size (MB)", "MB", "smaller", False),
 ]
 # Laid out by hand, in inches, so that the gap between one panel's caption
 # and the next panel is the same whether or not a legend sits in between

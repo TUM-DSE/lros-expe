@@ -1,0 +1,7 @@
+config,component,size_bytes
+linux,kernel,65359872
+linux,rootfs,3790471168
+lros,kernel,6180864
+lros,bootloader,7720
+lros,image,69210112
+__comment__ ,values obtained by fallocate -d on the images,
