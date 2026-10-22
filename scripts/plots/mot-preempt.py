@@ -7,6 +7,7 @@ LROS, the median with the quartiles, and the same request alone on the device.
 """
 import sys
 
+import mot_fonts  # noqa: F401
 from common import *
 import matplotlib.lines as mlines
 
@@ -37,16 +38,13 @@ def plot(out_path, groups):
         if not np.isnan(alone[i]):
             ax.hlines(alone[i], x[i] - 0.4, x[i] + 0.4, color='black', linestyle='--',
                       linewidth=0.8, zorder=4)
-    ax.set_yscale('log')
-    ax.yaxis.set_major_locator(ticker.FixedLocator([0.1, 0.3, 1, 3, 10]))
-    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f'{v:g}'))
-    ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+    tight_log_y(ax, [values[k][i] + d * errors[k][j][i] for k in values for i in range(len(labels))
+                     for j, d in ((0, -1), (1, 1))] + alone)
     ax.set_ylabel('TTFT (s)')
-    ax.set_ylim(top=np.nanmax(values['llamacpp']) * 6)
     better_hint(ax)
     # llama.cpp and LROS are in the legend above the figure.
     handles = [mlines.Line2D([], [], color='black', linestyle='--', linewidth=0.8, label='alone')]
-    ax.legend(handles=handles, fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper left',
+    ax.legend(handles=handles, fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper center',
               handlelength=1.6)
     panel_caption(ax, '(c) Preemption of a prefill', y=-0.25)
     for i, lab in enumerate(labels):

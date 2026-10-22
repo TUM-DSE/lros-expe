@@ -5,6 +5,7 @@
 """
 import sys
 
+import mot_fonts  # noqa: F401
 from common import *
 
 
@@ -13,7 +14,7 @@ def plot(out_path):
     keys = ['llamacpp', 'lros']
     handles, labels = legend_handles(keys)
     fig.legend(handles, ['llama.cpp on Linux', 'LROS'], loc='center', ncol=len(keys),
-               frameon=False, fontsize=FONTSIZE_LEGEND + 1, handlelength=1.6,
+               frameon=False, fontsize=7, handlelength=1.6,
                columnspacing=1.6, borderpad=0)
     save_path(fig, out_path)
 

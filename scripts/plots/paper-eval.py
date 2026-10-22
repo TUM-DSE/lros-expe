@@ -118,7 +118,7 @@ def weights(axes, results):
             if 'not fit' in t.get_text():
                 t.remove()
         ax.set_title('')
-        ax.set_xlabel(f'Memory quota ({PCT} of model)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
+        ax.set_xlabel(f'Memory budget ({PCT} of model)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
         better_hint(ax, higher=True)
     axes[0].set_ylabel('Decode (tok/s)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=1)
 

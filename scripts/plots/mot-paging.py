@@ -8,6 +8,7 @@ over the limited shares.
 """
 import argparse
 
+import mot_fonts  # noqa: F401
 from common import *
 import matplotlib.lines as mlines
 
@@ -37,12 +38,7 @@ def plot(out_path, arms, gbs):
         if s != 100:
             ax.hlines(bound(s), x[i] - 0.45, x[i] + 0.45, color='black', linestyle='--',
                       linewidth=0.8, zorder=4)
-    ax.set_yscale('log')
-    ax.yaxis.set_major_locator(ticker.FixedLocator([0.1, 0.3, 1, 3, 10, 30]))
-    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f'{v:g}'))
-    ax.yaxis.set_minor_formatter(ticker.NullFormatter())
-    low = np.nanmin([v for k in series for v in values[k]])
-    ax.set_ylim(0.3 if low > 0.4 else 0.1, np.nanmax([v for k in series for v in values[k]]) * 4)
+    tight_log_y(ax, [v for k in series for v in values[k]] + [bound(s) for s in shares if s != 100], top=2.2)
     ax.set_xlabel(r'Weights in memory (\%)' if USETEX else 'Weights in memory (%)')
     ax.set_ylabel('Decode (tokens/s)')
     better_hint(ax, higher=True)
@@ -50,8 +46,8 @@ def plot(out_path, arms, gbs):
     handles = legend_handles(['linux-mlock'])[0] if 'linux-mlock' in series else []
     handles.append(mlines.Line2D([], [], color='black', linestyle='--', linewidth=0.8,
                                  label='I/O bound (computed)'))
-    ax.legend(handles=handles, fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper right',
-              handlelength=1.6, labelspacing=0.2)
+    ax.legend(handles=handles[::-1], fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper right',
+              bbox_to_anchor=(1.0, 1.08), handlelength=1.6, labelspacing=0.2)
     panel_caption(ax, '(a) Weight paging', y=-0.41)
     for s in shares:
         row = '  '.join(f"{k} {data[k][0].get(s, float('nan')):6.2f}" for k in series)

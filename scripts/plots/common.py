@@ -237,6 +237,17 @@ def format_big_numbers(x, pos=None):
         return f'{x:.0f}'
 
 
+def tight_log_y(ax, values, pad=1.25, top=None):
+    """A logarithmic y axis cropped to the plotted values, with `pad` of room
+    below the lowest and `top` (default `pad`) above the highest."""
+    v = np.asarray([x for x in np.ravel(values) if np.isfinite(x) and x > 0])
+    ax.set_yscale('log')
+    ax.set_ylim(v.min() / pad, v.max() * (top or pad))
+    ax.yaxis.set_major_locator(ticker.LogLocator(subs=(1, 2, 5)))
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:g}'))
+    ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+
+
 def better_hint(ax, higher: bool = False, xy=(0.0, 1.02), inside=False):
     """The blue hint above the axes telling which direction is good, or with
     `inside` in the axes' top right corner."""

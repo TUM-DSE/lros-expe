@@ -332,14 +332,14 @@ def draw_partial(df, disks, axes, configs, compact=False, split=True):
         # The recompute, the same whatever the quota: a full prefill of N.
         # Far above every bar, so it is stated rather than drawn.
         notes = []
-        for system, label in (("lros", "LROS"), ("linux", "userspace")):
+        for system in ("lros", "linux"):
             rows = pd.concat([sub, ref[ref["disk"] == disk]])
             rows = rows[rows["config"].str.startswith(system)]
             if not rows.empty:
-                notes.append("%s %.1f" % (label, rows["t_pp_ms"].median() / 1000.0))
+                notes.append(rows["t_pp_ms"].median() / 1000.0)
         if notes:
-            text = ("recompute:\n%s s" % ",\n".join(notes)) if compact \
-                else "recompute: %s s" % ", ".join(notes)
+            span = "%.1f s" % notes[0] if len(notes) == 1 else "%.1f to %.1f s" % (min(notes), max(notes))
+            text = ("recompute instead:\n%s" % span) if compact else "recompute instead: %s" % span
             ax.text(0.02, 0.97, text, transform=ax.transAxes, ha="left", va="top",
                     fontsize=FONTSIZE_ANNOTATION, color="0.35")
         ax.set_xticks(x)

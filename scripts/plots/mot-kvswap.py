@@ -8,6 +8,7 @@ with the cache resident.
 """
 import sys
 
+import mot_fonts  # noqa: F401
 from common import *
 import matplotlib.lines as mlines
 
@@ -31,19 +32,15 @@ def plot(csv, out_path):
     for i, n in enumerate(ns):
         ax.hlines(resident[n], x[i] - 0.45, x[i] + 0.45, color='black', linestyle='--',
                   linewidth=0.8, zorder=4)
-    ax.set_yscale('log')
-    ax.yaxis.set_major_locator(ticker.FixedLocator([0.03, 0.1, 0.3, 1, 3]))
-    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f'{v:g}'))
-    ax.yaxis.set_minor_formatter(ticker.NullFormatter())
     ax.set_xlabel('Context (tokens)')
-    ax.set_ylabel('Time to next token (s)')
+    ax.set_ylabel('Next token (s)')
     better_hint(ax)
     # llama.cpp and LROS (all evicted) are in the legend above the figure.
     handles, _ = legend_handles(['kv-part'])
     handles.append(mlines.Line2D([], [], color='black', linestyle='--', linewidth=0.8, label='no eviction'))
     ax.legend(handles=handles, fontsize=FONTSIZE_LEGEND, frameon=False, loc='upper left',
-              ncol=2, handlelength=1.6, columnspacing=0.8)
-    ax.set_ylim(0.03, np.nanmax(values['kv-state']) * 5)
+              handlelength=1.6, labelspacing=0.2)
+    tight_log_y(ax, [v for k in values for v in values[k]] + list(resident.values), top=2.2)
     panel_caption(ax, '(b) KV cache eviction', y=-0.41)
     for k, s in arms:
         print(f"{style_for(k)['label']:24s} " + "  ".join(f"{n}:{v:.3f}" for n, v in s.items()))

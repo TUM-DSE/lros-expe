@@ -226,13 +226,15 @@ plot out=PAPER:
 	cd {{HERE}}/plots
 	export PLOT_USETEX=1   # the paper's figures are typeset by LaTeX
 	python3 mot-legend.py {{out}}/mot-legend.pdf
-	python3 mot-paging.py {{out}}/mot-paging.pdf \
-	  --default $R/mot-paging-f16-default/joy/mot-paging-f16-default.csv \
-	  --mlock $R/mot-paging-f16-final/joy/mot-paging-f16-final.csv \
-	  --lros $R/mot-paging-lros-f16-final/joy/mot-paging-lros-f16-final.csv
-	python3 mot-kvswap.py $R/mot-kvswap/joy/mot-kvswap.csv {{out}}/mot-kvswap.pdf
+	# The CPU panels on the RK3588 (its NVMe reads 2.8 GB/s in 4 MiB direct reads),
+	# the GPU on the Orin.
+	python3 mot-paging.py {{out}}/mot-paging.pdf --gbs 2.8 \
+	  --default $R/mot-paging-f16-default/orangepi/mot-paging-f16-default.csv \
+	  --mlock $R/mot-paging-f16-final/orangepi/mot-paging-f16-final.csv \
+	  --lros $R/mot-paging-lros-f16-final/orangepi/mot-paging-lros-f16-final.csv
+	python3 mot-kvswap.py $R/mot-kvswap/orangepi/mot-kvswap.csv {{out}}/mot-kvswap.pdf
 	args=()
-	for d in cpu:joy gpu:joy npu:orangepi; do
+	for d in cpu:orangepi gpu:joy npu:orangepi; do
 	  f=$R/mot-preempt-${d%%:*}/${d#*:}/mot-preempt-${d%%:*}.csv
 	  [ -f "$f" ] && args+=("$(echo ${d%%:*} | tr a-z A-Z)" "$f")
 	done
