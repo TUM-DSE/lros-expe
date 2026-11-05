@@ -148,4 +148,3 @@ plot out=PAPER:
 	cd {{HERE}}/plots
 	export PLOT_USETEX=1   # the paper's figures are typeset by LaTeX
 	python3 sched.py {{out}}/sched.pdf --cpu $cpu --accel $accel --devices CPU,GPU
-	python3 sched.py {{out}}/sched-npu.pdf --cpu $cpu --accel $accel --devices NPU

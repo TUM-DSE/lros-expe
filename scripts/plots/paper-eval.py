@@ -4,6 +4,7 @@
   eval-main.pdf    (a-b) the end-to-end scenario, (c-d) VIA against the native
                    backend, (e-f) weights over a memory quota, (g) KV swap
   eval-sched.pdf   interactive requests into background work, CPU and GPU
+  sched-npu.pdf    the same on the NPU, for the appendix
 
 Each panel is drawn by the script of its own figure; this one lays them out.
 
@@ -39,10 +40,10 @@ import kvswap
 SYSTEMS = [('llama.cpp', LINUX_COLOR, LINUX_HATCH), ('LROS', LROS_COLOR, LROS_HATCH)]
 
 
-def legend(fig, extra=(), y=1.0, systems=SYSTEMS):
+def legend(fig, extra=(), y=1.0, systems=SYSTEMS, ncol=None):
     handles = [Patch(facecolor=c, hatch=h, edgecolor='black', linewidth=0.4, label=l)
                for l, c, h in systems] + list(extra)
-    fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, y), ncol=len(handles),
+    fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, y), ncol=ncol or len(handles),
                fontsize=FONTSIZE_LEGEND, frameon=False, handlelength=1.4, handleheight=0.8,
                columnspacing=1.6, handletextpad=0.4, borderaxespad=0)
 
@@ -179,17 +180,19 @@ def background_cost(ax, s):
 CPU_PLATFORM = 'rk3588'
 
 
-def sched_figure(out, results):
+def sched_results(results):
     def csvs(*names):
         return [c for n in names for c in sorted(glob.glob(os.path.join(results, n, '*', n + '.csv')))]
     arms = [a for a, _, _, _ in sched.ARMS]
     cpu = sched.load(csvs('sched-cpu', 'sched-cpu-lros', 'sched-cpu-host'))
     acc = sched.load(csvs('sched-accel', 'sched-accel-host', 'sched-accel-lros'))
-    rows = [('CPU', sched.summarise(cpu[(cpu.platform == CPU_PLATFORM) & cpu.arm.isin(arms)], ['arm', 'fill'])),
-            ('GPU', sched.summarise(acc[(acc.platform == 'orin') & acc.arm.isin(arms)], ['arm', 'fill']))]
+    return {'CPU': sched.summarise(cpu[(cpu.platform == CPU_PLATFORM) & cpu.arm.isin(arms)], ['arm', 'fill']),
+            'GPU': sched.summarise(acc[(acc.platform == 'orin') & acc.arm.isin(arms)], ['arm', 'fill']),
+            'NPU': sched.summarise(acc[(acc.platform == 'rk3588') & acc.arm.isin(arms)], ['arm', 'fill'])}
 
-    fig, axes = plt.subplots(1, 4, figsize=(figwidth_full, 1.95))
-    fig.subplots_adjust(left=0.06, right=0.995, top=0.77, bottom=0.33, wspace=0.48)
+
+# A decode and a TTFT panel per device, side by side.
+def sched_panels(axes, rows):
     letters = iter('abcd')
     for k, (name, s) in enumerate(rows):
         dec, ttft = axes[2 * k], axes[2 * k + 1]
@@ -201,9 +204,34 @@ def sched_figure(out, results):
         caption(ttft, f'({next(letters)}) {name}: interactive TTFT', y=-0.56)
     for ax in axes:
         ax.set_xlabel('Background prompt (tok)', fontsize=FONTSIZE_AXIS_LABEL, labelpad=9)
+
+
+def sched_legend(fig, y, ncol=None):
     legend(fig, extra=[plt.Line2D([], [], color='black', linewidth=0.7, linestyle='--',
-                                  label='Minimal throughput for reading')], y=0.885,
-           systems=[(l, c, h) for _, l, c, h in sched.ARMS])
+                                  label='Minimal throughput for reading')], y=y,
+           systems=[(l, c, h) for _, l, c, h in sched.ARMS], ncol=ncol)
+
+
+def sched_figure(out, results):
+    r = sched_results(results)
+    fig, axes = plt.subplots(1, 4, figsize=(figwidth_full, 1.95))
+    fig.subplots_adjust(left=0.06, right=0.995, top=0.77, bottom=0.33, wspace=0.48)
+    sched_panels(axes, [('CPU', r['CPU']), ('GPU', r['GPU'])])
+    sched_legend(fig, y=0.885)
+    save_path(fig, out)
+
+
+# eval-sched is set at 0.9 of the text width and this one at 3.3 in: this width
+# prints its text at the same size.
+NPU_WIDTH = 3.3 / (0.9 * 6.75 / figwidth_full)
+
+
+def sched_npu_figure(out, results):
+    r = sched_results(results)
+    fig, axes = plt.subplots(1, 2, figsize=(NPU_WIDTH, 2.25))
+    fig.subplots_adjust(left=0.12, right=0.99, top=0.67, bottom=0.285, wspace=0.48)
+    sched_panels(axes, [('NPU', r['NPU'])])
+    sched_legend(fig, y=0.75, ncol=2)
     save_path(fig, out)
 
 
@@ -213,3 +241,4 @@ if __name__ == '__main__':
     out_dir, results = sys.argv[1], sys.argv[2]
     main_figure(os.path.join(out_dir, 'eval-main.pdf'), results)
     sched_figure(os.path.join(out_dir, 'eval-sched.pdf'), results)
+    sched_npu_figure(os.path.join(out_dir, 'sched-npu.pdf'), results)
